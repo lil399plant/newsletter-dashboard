@@ -22,8 +22,10 @@ import hmac
 import hashlib
 from http.server import BaseHTTPRequestHandler
 
-# Make the pipeline package importable from the project root
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+# Make the pipeline package importable — works both locally and on Vercel
+_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _root not in sys.path:
+    sys.path.insert(0, _root)
 
 from pipeline.collect   import collect_all
 from pipeline.calculate import calculate_all
