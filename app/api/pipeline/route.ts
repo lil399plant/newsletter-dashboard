@@ -300,7 +300,7 @@ Never use "it's worth noting" or "as we can see."`;
 
 async function gemini(prompt: string): Promise<string> {
   const key = process.env.GEMINI_API_KEY;
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`;
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -309,7 +309,10 @@ async function gemini(prompt: string): Promise<string> {
       generationConfig: { maxOutputTokens: 2000, temperature: 0.3 },
     }),
   });
-  if (!res.ok) throw new Error(`Gemini ${res.status}`);
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Gemini ${res.status}: ${body}`);
+  }
   const d = await res.json();
   return d.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "";
 }
