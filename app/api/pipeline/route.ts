@@ -306,7 +306,7 @@ async function gemini(prompt: string): Promise<string> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       contents: [{ parts: [{ text: `${SYSTEM}\n\n${prompt}` }] }],
-      generationConfig: { maxOutputTokens: 500, temperature: 0.3 },
+      generationConfig: { maxOutputTokens: 2000, temperature: 0.3 },
     }),
   });
   if (!res.ok) throw new Error(`Gemini ${res.status}`);
@@ -325,32 +325,28 @@ async function generateCommentary(metrics: Record<string, unknown>) {
   const fx = metrics.fx       as any;
   const pm = metrics.prediction_markets as any;
 
-  const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+  const raw = await gemini(`You are writing the markets section of a professional financial newsletter.
+Generate commentary for ALL four sections in ONE response. Return a single JSON object with keys: equities, rates, fx, prediction_markets.
 
-  const eqRaw = await gemini(`EQUITIES section.
-Metrics: ${JSON.stringify({ SPY_wow: eq.week_chg_pct?.SPY, VIX: eq.levels?.VIX, rvol: eq.realized_vol_21d, vix_rv_spread: eq.vix_rv_spread, ew_chg: eq.ew_ratio_chg_wow, top: eq.top_sector, top_ret: eq.sector_returns_wow?.[eq.top_sector], bot: eq.bot_sector, bot_ret: eq.sector_returns_wow?.[eq.bot_sector] })}
-Return JSON: { summary, tape_vs_story, so_what, actionable }
-tape_vs_story format exactly: "Narrative: ...\nTape: ...\nRead: ..."`);
-  await sleep(5000);
+EQUITIES metrics: ${JSON.stringify({ SPY_wow: eq.week_chg_pct?.SPY, VIX: eq.levels?.VIX, rvol: eq.realized_vol_21d, vix_rv_spread: eq.vix_rv_spread, ew_chg: eq.ew_ratio_chg_wow, top: eq.top_sector, top_ret: eq.sector_returns_wow?.[eq.top_sector], bot: eq.bot_sector, bot_ret: eq.sector_returns_wow?.[eq.bot_sector] })}
+RATES metrics: ${JSON.stringify({ levels: rt.levels, chg_bp: rt.week_chg_bp, curve_2s10s: rt.curve_2s10s, curve_chg: rt.curve_chg_wow_bp, real_10y: rt.real_10y, bei_10y: rt.breakeven_10y, real_split_pct: rt.real_vs_nominal_split })}
+FX metrics: ${JSON.stringify({ week_chg_pct: fx.week_chg_pct, factor_labels: fx.factor_labels, carry_winners: fx.carry_winners })}
+PREDICTION MARKETS metrics (yes_price = probability 0-1, wow_chg = week-over-week change): ${JSON.stringify({ top: pm.top_markets?.slice(0, 6), movers: pm.biggest_movers, fed: pm.fed_markets })}
 
-  const rtRaw = await gemini(`RATES section.
-Metrics: ${JSON.stringify({ levels: rt.levels, chg_bp: rt.week_chg_bp, curve_2s10s: rt.curve_2s10s, curve_chg: rt.curve_chg_wow_bp, real_10y: rt.real_10y, bei_10y: rt.breakeven_10y, real_split_pct: rt.real_vs_nominal_split })}
-Return JSON: { summary, policy_pricing, real_vs_nominal, so_what }`);
-  await sleep(5000);
+Return exactly this JSON shape:
+{
+  "equities": { "summary": "", "tape_vs_story": "Narrative: ...\\nTape: ...\\nRead: ...", "so_what": "", "actionable": "" },
+  "rates": { "summary": "", "policy_pricing": "", "real_vs_nominal": "", "so_what": "" },
+  "fx": { "grid": [{"pair": "", "move_pct": 0, "driver": ""}], "cross_section_theme": "", "misalignment": "", "so_what": "" },
+  "prediction_markets": { "summary": "", "fed_read": "", "divergence": "", "so_what": "" }
+}`);
 
-  const fxRaw = await gemini(`FX section.
-Metrics: ${JSON.stringify({ week_chg_pct: fx.week_chg_pct, factor_labels: fx.factor_labels, carry_winners: fx.carry_winners })}
-Return JSON: { grid: [{pair, move_pct, driver}], cross_section_theme, misalignment, so_what }`);
-  await sleep(5000);
-
-  const pmRaw = await gemini(`PREDICTION MARKETS section (Polymarket real-money odds).
-yes_price = probability 0-1. wow_chg = week-over-week probability change.
-Metrics: ${JSON.stringify({ top: pm.top_markets?.slice(0, 6), movers: pm.biggest_movers, fed: pm.fed_markets })}
-Return JSON: { summary, fed_read, divergence, so_what }`);
-
+  const parsed = parseJson(raw) as any;
   return {
-    equities: parseJson(eqRaw), rates: parseJson(rtRaw),
-    fx: parseJson(fxRaw), prediction_markets: parseJson(pmRaw),
+    equities:           parsed.equities           ?? { summary: raw },
+    rates:              parsed.rates              ?? {},
+    fx:                 parsed.fx                 ?? {},
+    prediction_markets: parsed.prediction_markets ?? {},
   };
 }
 
