@@ -73,13 +73,13 @@ export interface Dashboard {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function chgColor(val: number | undefined) {
-  if (val === undefined || isNaN(val)) return "text-zinc-400";
+function chgColor(val: number | undefined | null) {
+  if (val == null || isNaN(val)) return "text-zinc-400";
   return val > 0 ? "text-emerald-400" : val < 0 ? "text-red-400" : "text-zinc-400";
 }
 
-function fmt(val: number | undefined, decimals = 2, suffix = "") {
-  if (val === undefined || isNaN(val)) return "—";
+function fmt(val: number | undefined | null, decimals = 2, suffix = "") {
+  if (val == null || isNaN(val)) return "—";
   const sign = val > 0 ? "+" : "";
   return `${sign}${val.toFixed(decimals)}${suffix}`;
 }
