@@ -325,25 +325,28 @@ async function generateCommentary(metrics: Record<string, unknown>) {
   const fx = metrics.fx       as any;
   const pm = metrics.prediction_markets as any;
 
-  const [eqRaw, rtRaw, fxRaw, pmRaw] = await Promise.all([
-    gemini(`EQUITIES section.
+  const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+
+  const eqRaw = await gemini(`EQUITIES section.
 Metrics: ${JSON.stringify({ SPY_wow: eq.week_chg_pct?.SPY, VIX: eq.levels?.VIX, rvol: eq.realized_vol_21d, vix_rv_spread: eq.vix_rv_spread, ew_chg: eq.ew_ratio_chg_wow, top: eq.top_sector, top_ret: eq.sector_returns_wow?.[eq.top_sector], bot: eq.bot_sector, bot_ret: eq.sector_returns_wow?.[eq.bot_sector] })}
 Return JSON: { summary, tape_vs_story, so_what, actionable }
-tape_vs_story format exactly: "Narrative: ...\nTape: ...\nRead: ..."`),
+tape_vs_story format exactly: "Narrative: ...\nTape: ...\nRead: ..."`);
+  await sleep(5000);
 
-    gemini(`RATES section.
+  const rtRaw = await gemini(`RATES section.
 Metrics: ${JSON.stringify({ levels: rt.levels, chg_bp: rt.week_chg_bp, curve_2s10s: rt.curve_2s10s, curve_chg: rt.curve_chg_wow_bp, real_10y: rt.real_10y, bei_10y: rt.breakeven_10y, real_split_pct: rt.real_vs_nominal_split })}
-Return JSON: { summary, policy_pricing, real_vs_nominal, so_what }`),
+Return JSON: { summary, policy_pricing, real_vs_nominal, so_what }`);
+  await sleep(5000);
 
-    gemini(`FX section.
+  const fxRaw = await gemini(`FX section.
 Metrics: ${JSON.stringify({ week_chg_pct: fx.week_chg_pct, factor_labels: fx.factor_labels, carry_winners: fx.carry_winners })}
-Return JSON: { grid: [{pair, move_pct, driver}], cross_section_theme, misalignment, so_what }`),
+Return JSON: { grid: [{pair, move_pct, driver}], cross_section_theme, misalignment, so_what }`);
+  await sleep(5000);
 
-    gemini(`PREDICTION MARKETS section (Polymarket real-money odds).
+  const pmRaw = await gemini(`PREDICTION MARKETS section (Polymarket real-money odds).
 yes_price = probability 0-1. wow_chg = week-over-week probability change.
 Metrics: ${JSON.stringify({ top: pm.top_markets?.slice(0, 6), movers: pm.biggest_movers, fed: pm.fed_markets })}
-Return JSON: { summary, fed_read, divergence, so_what }`),
-  ]);
+Return JSON: { summary, fed_read, divergence, so_what }`);
 
   return {
     equities: parseJson(eqRaw), rates: parseJson(rtRaw),
