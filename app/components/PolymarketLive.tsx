@@ -81,10 +81,7 @@ interface OutcomeHistory {
 // ─── Data fetching ────────────────────────────────────────────────────────────
 
 async function fetchTopEvents(): Promise<MarketEvent[]> {
-  const res = await fetch(
-    "https://gamma-api.polymarket.com/events?active=true&limit=100&order=volume24hr&ascending=false",
-    { cache: "no-store" }
-  );
+  const res = await fetch("/api/polymarket/events", { cache: "no-store" });
   if (!res.ok) throw new Error(`Gamma API ${res.status}`);
   const data = await res.json();
   const events: any[] = Array.isArray(data) ? data : data.events ?? [];
@@ -157,10 +154,9 @@ function safeParseArray(raw: string | null | undefined): string[] {
 
 async function fetchHistory(tokenId: string): Promise<HistoryPoint[]> {
   try {
-    const res = await fetch(
-      `https://clob.polymarket.com/prices-history?market=${tokenId}&interval=1m&fidelity=60`,
-      { cache: "no-store" }
-    );
+    const res = await fetch(`/api/polymarket/history?market=${tokenId}`, {
+      cache: "no-store",
+    });
     if (!res.ok) return [];
     const data = await res.json();
     const raw: { t: number; p: number }[] = data.history ?? [];
