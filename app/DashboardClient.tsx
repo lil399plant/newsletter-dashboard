@@ -106,6 +106,7 @@ function MetricRow({ label, value, sub }: { label: string; value: React.ReactNod
 }
 
 function CommentaryBlock({ text }: { text: string }) {
+  if (!text) return null;
   return <p className="text-sm text-zinc-300 leading-relaxed mt-3">{text}</p>;
 }
 
@@ -127,6 +128,7 @@ function TapeVsStory({ text }: { text: string }) {
 }
 
 function SoWhat({ text }: { text: string }) {
+  if (!text) return null;
   return (
     <div className="mt-3 rounded-md bg-zinc-900/60 border-l-2 border-amber-500/60 pl-3 py-2">
       <span className="text-xs text-amber-500/80 font-mono uppercase tracking-wider">so what </span>
@@ -136,6 +138,7 @@ function SoWhat({ text }: { text: string }) {
 }
 
 function Actionable({ text }: { text: string }) {
+  if (!text) return null;
   return (
     <div className="mt-2 rounded-md bg-zinc-900/40 border-l-2 border-blue-500/40 pl-3 py-2">
       <span className="text-xs text-blue-400/70 font-mono uppercase tracking-wider">watch </span>
@@ -347,7 +350,8 @@ function PredictionMarketsSection({ m, c, showCommentary }: { m: PredictionMarke
 // ─── Main client component ────────────────────────────────────────────────────
 
 export default function DashboardClient({ dashboard, asOf }: { dashboard: Dashboard; asOf: string }) {
-  const [showCommentary, setShowCommentary] = useState(true);
+  const hasCommentary = Boolean((dashboard.commentary?.equities as any)?.summary);
+  const [showCommentary, setShowCommentary] = useState(hasCommentary);
 
   return (
     <>
