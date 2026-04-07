@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import PolymarketLive from "./components/PolymarketLive";
 
 // ─── Types (mirrored from page.tsx) ───────────────────────────────────────────
 
@@ -380,7 +381,7 @@ export default function DashboardClient({ dashboard, asOf }: { dashboard: Dashbo
         <EquitiesSection m={dashboard.metrics.equities} c={dashboard.commentary.equities} showCommentary={showCommentary} />
         <RatesSection m={dashboard.metrics.rates} c={dashboard.commentary.rates} showCommentary={showCommentary} />
         <FxSection m={dashboard.metrics.fx} c={dashboard.commentary.fx} showCommentary={showCommentary} />
-        <PredictionMarketsSection m={dashboard.metrics.prediction_markets} c={dashboard.commentary.prediction_markets} showCommentary={showCommentary} />
+        <PolymarketLive />
       </div>
     </>
   );
