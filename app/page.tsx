@@ -1,4 +1,4 @@
-import { kv } from "@vercel/kv";
+import { Redis } from "@upstash/redis";
 
 // Types
 interface EquityMetrics {
@@ -479,9 +479,13 @@ export default async function DashboardPage() {
   let dashboard: Dashboard | null = null;
 
   try {
-    dashboard = await kv.get<Dashboard>("dashboard:latest");
+    const redis = new Redis({
+      url: process.env.KV_REST_API_URL!,
+      token: process.env.KV_REST_API_TOKEN!,
+    });
+    dashboard = await redis.get<Dashboard>("dashboard:latest");
   } catch {
-    // KV not configured or no data yet
+    // KV not configured or no data yet — show empty state
   }
 
   const asOf = dashboard?.as_of_date
