@@ -374,7 +374,7 @@ export async function GET() {
       as_of_date:         new Date().toISOString(),
     };
 
-    const commentary = await generateCommentary(metrics);
+    const commentary = { equities: {}, rates: {}, fx: { grid: [] }, prediction_markets: {} };
     const dashboard  = { metrics, commentary, as_of_date: metrics.as_of_date };
 
     const redis = new Redis({
