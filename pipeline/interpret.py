@@ -1,5 +1,5 @@
 """
-interpret.py — feeds the calculated metrics to Claude and returns
+interpret.py — feeds the calculated metrics to Gemini Flash and returns
 structured commentary in your newsletter's trader-note voice.
 
 Each section gets:
@@ -12,10 +12,14 @@ Output is a dict that maps directly onto the frontend dashboard sections.
 
 import os
 import json
-import anthropic
+import urllib.request
 
-CLIENT = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
-MODEL  = "claude-opus-4-6"
+GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
+MODEL = "gemini-2.0-flash"
+GEMINI_URL = (
+    f"https://generativelanguage.googleapis.com/v1beta/models/"
+    f"{MODEL}:generateContent?key={GEMINI_API_KEY}"
+)
 
 SYSTEM_PROMPT = """You write the markets section of a professional financial newsletter.
 
@@ -37,13 +41,23 @@ def _fmt_metrics(metrics: dict) -> str:
 
 
 def _call(prompt: str) -> str:
-    msg = CLIENT.messages.create(
-        model=MODEL,
-        max_tokens=400,
-        system=SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": prompt}],
+    """Call Gemini Flash via REST — no SDK needed."""
+    full_prompt = SYSTEM_PROMPT + "\n\n" + prompt
+    body = json.dumps({
+        "contents": [{"parts": [{"text": full_prompt}]}],
+        "generationConfig": {"maxOutputTokens": 600, "temperature": 0.3},
+    }).encode()
+
+    req = urllib.request.Request(
+        GEMINI_URL,
+        data=body,
+        headers={"Content-Type": "application/json"},
+        method="POST",
     )
-    return msg.content[0].text.strip()
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        result = json.loads(resp.read())
+
+    return result["candidates"][0]["content"]["parts"][0]["text"].strip()
 
 
 # ---------------------------------------------------------------------------
