@@ -13,20 +13,14 @@ const TENORS = [
   { label: "30Y", id: "DGS30"  },
 ];
 
-// Returns YYYY-MM-DD for Monday of the current week (UTC)
-function getMondayDate(): string {
+// Last Friday's date in YYYY-MM-DD (UTC)
+function lastFriday(): string {
   const now = new Date();
-  const day = now.getUTCDay(); // 0=Sun … 6=Sat
-  const daysBack = day === 0 ? 6 : day - 1;
-  const monday = new Date(now);
-  monday.setUTCDate(now.getUTCDate() - daysBack);
-  return monday.toISOString().slice(0, 10);
-}
-
-function getStartDate(): string {
-  const d = new Date();
-  d.setUTCDate(d.getUTCDate() - 21); // 3 weeks to be safe
-  return d.toISOString().slice(0, 10);
+  const day = now.getUTCDay(); // 0=Sun…6=Sat
+  const daysBack = day === 0 ? 2 : day === 6 ? 1 : day + 2; // back to most recent Fri
+  const fri = new Date(now);
+  fri.setUTCDate(now.getUTCDate() - daysBack);
+  return fri.toISOString().slice(0, 10);
 }
 
 async function fetchSeries(id: string, apiKey: string, start: string) {
@@ -37,50 +31,52 @@ async function fetchSeries(id: string, apiKey: string, start: string) {
   return (data.observations ?? []).filter((o: any) => o.value !== ".");
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const apiKey = process.env.FRED_API_KEY;
   if (!apiKey) return Response.json({ error: "No FRED_API_KEY" }, { status: 500 });
 
-  const mondayStr = getMondayDate();
-  const startStr = getStartDate();
+  const { searchParams } = new URL(request.url);
+  // refDate: user-chosen comparison date (YYYY-MM-DD). Defaults to last Friday.
+  const refDate = searchParams.get("refDate") ?? lastFriday();
+
+  // Fetch from 7 days before refDate so we can find the nearest prior trading day,
+  // plus enough runway to also get the latest data.
+  const refStart = new Date(refDate);
+  refStart.setUTCDate(refStart.getUTCDate() - 7);
+  const startStr = refStart.toISOString().slice(0, 10);
 
   const results = await Promise.all(
     TENORS.map(async ({ label, id }) => {
       const obs = await fetchSeries(id, apiKey, startStr);
-      if (obs.length === 0) return { label, monday: null, latest: null, mondayDate: null, latestDate: null };
+      if (obs.length === 0) return { label, ref: null, latest: null, refDate: null, latestDate: null };
 
-      // Latest = most recent observation
+      // Latest = most recent observation (FRED lags ~1 business day)
       const latestObs = obs[obs.length - 1];
       const latest = parseFloat(latestObs.value);
       const latestDate: string = latestObs.date;
 
-      // Week-open reference = Friday's close of the prior week.
-      // FRED H.15 publishes the *previous* business day's data at ~4:15 PM ET,
-      // so on Tuesday the latest available is Monday's close — making Monday
-      // and "latest" identical if we used Monday. Friday's close is what
-      // yields actually opened at on Monday morning and is always distinct.
-      const beforeMonday = obs.filter((o: any) => o.date < mondayStr);
-      const mondayObs = beforeMonday.length > 0
-        ? beforeMonday[beforeMonday.length - 1]   // Friday's close
-        : obs[0];
-      const monday = parseFloat(mondayObs.value);
-      const mondayDate: string = mondayObs.date;
+      // Ref curve = last observation on or before the chosen refDate
+      // This handles weekends and holidays automatically.
+      const onOrBefore = obs.filter((o: any) => o.date <= refDate);
+      const refObs = onOrBefore.length > 0 ? onOrBefore[onOrBefore.length - 1] : obs[0];
+      const ref = parseFloat(refObs.value);
+      const actualRefDate: string = refObs.date;
 
-      return { label, monday, latest, mondayDate, latestDate };
+      return { label, ref, latest, refDate: actualRefDate, latestDate };
     })
   );
 
-  const monday: Record<string, number> = {};
+  const ref: Record<string, number> = {};
   const latest: Record<string, number> = {};
   let latestDate = "";
-  let mondayDate = "";
+  let actualRefDate = "";
 
   for (const r of results) {
-    if (r.monday !== null) monday[r.label] = r.monday!;
+    if (r.ref !== null) ref[r.label] = r.ref!;
     if (r.latest !== null) latest[r.label] = r.latest!;
     if (r.latestDate) latestDate = r.latestDate;
-    if (r.mondayDate) mondayDate = r.mondayDate;
+    if (r.refDate) actualRefDate = r.refDate;
   }
 
-  return Response.json({ monday, latest, mondayDate, latestDate });
+  return Response.json({ ref, latest, refDate: actualRefDate, latestDate });
 }

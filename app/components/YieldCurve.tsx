@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import {
   LineChart,
   Line,
@@ -14,17 +14,37 @@ import {
 const TENORS = ["3M", "6M", "1Y", "2Y", "3Y", "5Y", "7Y", "10Y", "20Y", "30Y"];
 
 interface YieldData {
-  monday: Record<string, number>;
+  ref: Record<string, number>;
   latest: Record<string, number>;
-  mondayDate: string;
+  refDate: string;      // actual trading date used (may differ from input if holiday/weekend)
   latestDate: string;
 }
 
 interface ChartRow {
   tenor: string;
-  Monday: number | null;
+  Ref: number | null;
   Latest: number | null;
   bps: number | null;
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function toInputValue(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+function lastFriday(): string {
+  const now = new Date();
+  const day = now.getUTCDay();
+  const daysBack = day === 0 ? 2 : day === 6 ? 1 : day + 2;
+  const fri = new Date(now);
+  fri.setUTCDate(now.getUTCDate() - daysBack);
+  return toInputValue(fri);
+}
+
+function fmtDate(d: string): string {
+  if (!d) return "";
+  return new Date(d + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
 // ─── Custom X-axis tick ───────────────────────────────────────────────────────
@@ -32,30 +52,16 @@ interface ChartRow {
 function CustomTick({ x, y, payload, bpsMap }: any) {
   const tenor: string = payload?.value ?? "";
   const bps: number | null = bpsMap[tenor] ?? null;
-  const bpsLabel =
-    bps === null ? "" : bps > 0 ? `+${bps}bp` : bps < 0 ? `${bps}bp` : "0bp";
+  const bpsLabel = bps === null ? "" : bps > 0 ? `+${bps}bp` : bps < 0 ? `${bps}bp` : "0bp";
   const bpsColor = bps === null ? "#a1a1aa" : bps > 0 ? "#059669" : bps < 0 ? "#dc2626" : "#a1a1aa";
 
   return (
     <g transform={`translate(${x},${y})`}>
-      <text
-        x={0} y={0} dy={12}
-        textAnchor="middle"
-        fill="#52525b"
-        fontSize={9}
-        fontFamily="Times New Roman, serif"
-      >
+      <text x={0} y={0} dy={12} textAnchor="middle" fill="#52525b" fontSize={9} fontFamily="Times New Roman, serif">
         {tenor}
       </text>
       {bpsLabel && (
-        <text
-          x={0} y={0} dy={24}
-          textAnchor="middle"
-          fill={bpsColor}
-          fontSize={8}
-          fontFamily="Times New Roman, serif"
-          fontWeight="600"
-        >
+        <text x={0} y={0} dy={24} textAnchor="middle" fill={bpsColor} fontSize={8} fontFamily="Times New Roman, serif" fontWeight="600">
           {bpsLabel}
         </text>
       )}
@@ -66,13 +72,17 @@ function CustomTick({ x, y, payload, bpsMap }: any) {
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function YieldCurve() {
+  const [refDateInput, setRefDateInput] = useState<string>(lastFriday());
+  const [committedRefDate, setCommittedRefDate] = useState<string>(lastFriday());
   const [data, setData] = useState<YieldData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (refDate: string) => {
+    setLoading(true);
     try {
-      const res = await fetch("/api/rates/yieldcurve", { cache: "no-store" });
+      const res = await fetch(`/api/rates/yieldcurve?refDate=${refDate}`, { cache: "no-store" });
       if (!res.ok) throw new Error(`API ${res.status}`);
       setData(await res.json());
       setError(null);
@@ -83,50 +93,71 @@ export default function YieldCurve() {
     }
   }, []);
 
+  // Initial load + 5-min refresh
   useEffect(() => {
-    load();
-    const id = setInterval(load, 5 * 60_000); // refresh every 5 min
+    load(committedRefDate);
+    const id = setInterval(() => load(committedRefDate), 5 * 60_000);
     return () => clearInterval(id);
-  }, [load]);
+  }, [load, committedRefDate]);
+
+  // Debounce date input changes — commit after 600ms of no typing
+  function handleDateChange(val: string) {
+    setRefDateInput(val);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      if (val) setCommittedRefDate(val);
+    }, 600);
+  }
 
   const chartData: ChartRow[] = TENORS.map((tenor) => {
-    const mon = data?.monday[tenor] ?? null;
+    const ref = data?.ref[tenor] ?? null;
     const lat = data?.latest[tenor] ?? null;
-    const bps = mon !== null && lat !== null ? Math.round((lat - mon) * 100) : null;
-    return { tenor, Monday: mon, Latest: lat, bps };
+    const bps = ref !== null && lat !== null ? Math.round((lat - ref) * 100) : null;
+    return { tenor, Ref: ref, Latest: lat, bps };
   });
 
   const bpsMap: Record<string, number | null> = {};
   chartData.forEach((r) => { bpsMap[r.tenor] = r.bps; });
 
-  // Y-axis domain
-  const allVals = chartData.flatMap((r) => [r.Monday, r.Latest]).filter((v): v is number => v !== null);
+  const allVals = chartData.flatMap((r) => [r.Ref, r.Latest]).filter((v): v is number => v !== null);
   const yMin = allVals.length ? Math.floor((Math.min(...allVals) - 0.15) * 4) / 4 : 0;
   const yMax = allVals.length ? Math.ceil((Math.max(...allVals) + 0.15) * 4) / 4 : 6;
 
-  const fmtDate = (d: string) =>
-    d ? new Date(d + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "";
+  // If API returned a different actual date (holiday/weekend snapped), show it
+  const actualRefLabel = data?.refDate && data.refDate !== committedRefDate
+    ? `${fmtDate(data.refDate)} (nearest trading day)`
+    : fmtDate(data?.refDate ?? committedRefDate);
 
   return (
     <section>
-      {/* Section header */}
+      {/* Header */}
       <div className="flex items-center gap-3 mb-4">
         <span className="text-xs font-bold tracking-widest text-blue-900 uppercase">
           Treasury Yield Curve
         </span>
         <div className="flex-1 h-px bg-zinc-300" />
         {data && !loading && (
-          <span className="text-xs text-zinc-400">
-            {fmtDate(data.latestDate)}
-          </span>
+          <span className="text-xs text-zinc-400">{fmtDate(data.latestDate)}</span>
         )}
       </div>
 
-      {loading ? (
-        <div className="h-52 flex items-center justify-center">
-          <span className="text-xs text-zinc-400 animate-pulse">loading yield curve…</span>
-        </div>
-      ) : error ? (
+      {/* Date picker row */}
+      <div className="flex items-center gap-2 mb-4">
+        <span className="text-xs text-zinc-400">compare vs</span>
+        <input
+          type="date"
+          value={refDateInput}
+          max={toInputValue(new Date())}
+          onChange={(e) => handleDateChange(e.target.value)}
+          className="border border-zinc-300 rounded px-2 py-1 text-xs text-zinc-700 focus:outline-none focus:border-blue-400 bg-white"
+        />
+        {data?.refDate && (
+          <span className="text-xs text-zinc-400 italic">{actualRefLabel}</span>
+        )}
+        {loading && <span className="text-xs text-zinc-300 animate-pulse">loading…</span>}
+      </div>
+
+      {error ? (
         <div className="text-xs text-red-500 px-1">{error}</div>
       ) : (
         <>
@@ -148,14 +179,7 @@ export default function YieldCurve() {
                 width={42}
               />
               <Tooltip
-                contentStyle={{
-                  background: "#ffffff",
-                  border: "1px solid #e4e4e7",
-                  borderRadius: 6,
-                  fontSize: 10,
-                  fontFamily: "Times New Roman, serif",
-                  padding: "6px 10px",
-                }}
+                contentStyle={{ background: "#ffffff", border: "1px solid #e4e4e7", borderRadius: 6, fontSize: 10, fontFamily: "Times New Roman, serif", padding: "6px 10px" }}
                 itemStyle={{ color: "#3f3f46" }}
                 labelStyle={{ color: "#a1a1aa", marginBottom: 3 }}
                 formatter={(v: number, name: string) => [`${v.toFixed(3)}%`, name]}
@@ -165,18 +189,16 @@ export default function YieldCurve() {
                 iconType="plainline"
                 iconSize={12}
               />
-              {/* Monday — dashed gray reference line */}
               <Line
                 type="monotone"
-                dataKey="Monday"
+                dataKey="Ref"
                 stroke="#a1a1aa"
                 strokeWidth={1.5}
                 strokeDasharray="4 3"
                 dot={false}
                 connectNulls
-                name={`Fri ${fmtDate(data?.mondayDate ?? "")}`}
+                name={fmtDate(data?.refDate ?? committedRefDate)}
               />
-              {/* Latest — solid dark blue */}
               <Line
                 type="monotone"
                 dataKey="Latest"
@@ -184,24 +206,24 @@ export default function YieldCurve() {
                 strokeWidth={2}
                 dot={{ r: 2.5, fill: "#1e3a8a", strokeWidth: 0 }}
                 connectNulls
-                name={`Latest ${fmtDate(data?.latestDate ?? "")}`}
+                name={`Latest (${fmtDate(data?.latestDate ?? "")})`}
               />
             </LineChart>
           </ResponsiveContainer>
 
           {/* Summary strip */}
           <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 px-1">
-            {chartData
-              .filter((r) => r.bps !== null)
-              .map((r) => (
-                <div key={r.tenor} className="flex items-baseline gap-1 text-xs">
-                  <span className="text-zinc-500">{r.tenor}</span>
-                  <span className="font-semibold" style={{ color: r.bps! > 0 ? "#059669" : r.bps! < 0 ? "#dc2626" : "#a1a1aa" }}>
-                    {r.bps! > 0 ? "+" : ""}{r.bps}bp
-                  </span>
-                </div>
-              ))}
-            <span className="text-zinc-300 text-xs ml-auto">vs Fri close</span>
+            {chartData.filter((r) => r.bps !== null).map((r) => (
+              <div key={r.tenor} className="flex items-baseline gap-1 text-xs">
+                <span className="text-zinc-500">{r.tenor}</span>
+                <span className="font-semibold" style={{ color: r.bps! > 0 ? "#059669" : r.bps! < 0 ? "#dc2626" : "#a1a1aa" }}>
+                  {r.bps! > 0 ? "+" : ""}{r.bps}bp
+                </span>
+              </div>
+            ))}
+            {data?.refDate && (
+              <span className="text-zinc-300 text-xs ml-auto">vs {fmtDate(data.refDate)}</span>
+            )}
           </div>
         </>
       )}
