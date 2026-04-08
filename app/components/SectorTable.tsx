@@ -190,10 +190,10 @@ export default function SectorTable() {
 
                       {/* 52W return */}
                       <td
-                        className={`py-2 px-3 text-right tabular-nums whitespace-nowrap font-medium ${retColor(row.ret52w != null ? row.ret52w * 100 : null)}`}
+                        className={`py-2 px-3 text-right tabular-nums whitespace-nowrap font-medium ${retColor(row.ret52w)}`}
                         style={{ fontSize: 11 }}
                       >
-                        {row.ret52w != null ? fmtPct(row.ret52w * 100) : "—"}
+                        {fmtPct(row.ret52w)}
                       </td>
 
                       {/* 4W return */}
