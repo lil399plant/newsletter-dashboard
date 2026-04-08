@@ -3,6 +3,7 @@
 import { useState } from "react";
 import PolymarketLive from "./components/PolymarketLive";
 import YieldCurve from "./components/YieldCurve";
+import EquityChart from "./components/EquityChart";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -151,49 +152,6 @@ function Actionable({ text }: { text: string }) {
 
 // ─── Sections ─────────────────────────────────────────────────────────────────
 
-function EquitiesSection({ m, c, showCommentary }: { m: EquityMetrics; c: Dashboard["commentary"]["equities"]; showCommentary: boolean }) {
-  const SECTOR_LABELS: Record<string, string> = {
-    XLK: "Tech", XLF: "Fins", XLE: "Energy", XLV: "Health",
-    XLI: "Indus", XLY: "Disc", XLP: "Staples", XLU: "Utils",
-    XLB: "Mats", XLRE: "RE", XLC: "Comm",
-  };
-  return (
-    <section>
-      <SectionHeader label="Equities" />
-      <div className="grid grid-cols-2 gap-x-8">
-        <div>
-          {["SPY", "RSP", "QQQ", "IWM"].map((t) => (
-            <MetricRow key={t} label={t}
-              value={<span className={chgColor(m.week_chg_pct[t])}>{fmt(m.week_chg_pct[t], 2, "% wow")}</span>}
-              sub={m.levels[t] ? `@ ${m.levels[t].toFixed(2)}` : undefined}
-            />
-          ))}
-        </div>
-        <div>
-          <MetricRow label="VIX" value={m.levels["VIX"]?.toFixed(1) ?? "—"} />
-          <MetricRow label="RVol 21d" value={`${m.realized_vol_21d?.toFixed(1) ?? "—"}%`} />
-          <MetricRow label="VIX − RVol" value={<span className={chgColor(m.vix_rv_spread)}>{fmt(m.vix_rv_spread, 1, " pts")}</span>} />
-          <MetricRow label="EW ratio chg" value={<span className={chgColor(m.ew_ratio_chg_wow)}>{fmt(m.ew_ratio_chg_wow, 3)}</span>} />
-        </div>
-      </div>
-      <div className="mt-3 flex flex-wrap gap-1.5">
-        {Object.entries(m.sector_returns_wow ?? {}).map(([t, v]) => (
-          <div key={t} className={`px-2 py-0.5 rounded text-xs border ${v > 0 ? "bg-emerald-50 border-emerald-300 text-emerald-700" : "bg-red-50 border-red-300 text-red-600"}`}>
-            {SECTOR_LABELS[t] ?? t} {fmt(v, 1, "%")}
-          </div>
-        ))}
-      </div>
-      {showCommentary && (
-        <>
-          <CommentaryBlock text={c.summary} />
-          {c.tape_vs_story && <TapeVsStory text={c.tape_vs_story} />}
-          <SoWhat text={c.so_what} />
-          {c.actionable && <Actionable text={c.actionable} />}
-        </>
-      )}
-    </section>
-  );
-}
 
 
 function FxSection({ m, c, showCommentary }: { m: FxMetrics; c: Dashboard["commentary"]["fx"]; showCommentary: boolean }) {
@@ -269,7 +227,7 @@ export default function DashboardClient({ dashboard, asOf }: { dashboard: Dashbo
       </div>
 
       <div className="max-w-4xl mx-auto px-6 py-8 space-y-12">
-        <EquitiesSection m={dashboard.metrics.equities} c={dashboard.commentary.equities} showCommentary={showCommentary} />
+        <EquityChart />
         <YieldCurve />
         <FxSection m={dashboard.metrics.fx} c={dashboard.commentary.fx} showCommentary={showCommentary} />
         <PolymarketLive />
