@@ -54,13 +54,15 @@ export async function GET() {
       const latest = parseFloat(latestObs.value);
       const latestDate: string = latestObs.date;
 
-      // Monday reference = Monday's EOD if already published by FRED,
-      // otherwise Friday's close (FRED lags by ~1 day, so on Monday itself
-      // the data isn't available yet — Friday close is the best proxy).
-      const mondayExact = obs.find((o: any) => o.date === mondayStr);
+      // Week-open reference = Friday's close of the prior week.
+      // FRED H.15 publishes the *previous* business day's data at ~4:15 PM ET,
+      // so on Tuesday the latest available is Monday's close — making Monday
+      // and "latest" identical if we used Monday. Friday's close is what
+      // yields actually opened at on Monday morning and is always distinct.
       const beforeMonday = obs.filter((o: any) => o.date < mondayStr);
-      const mondayObs = mondayExact
-        ?? (beforeMonday.length > 0 ? beforeMonday[beforeMonday.length - 1] : obs[0]);
+      const mondayObs = beforeMonday.length > 0
+        ? beforeMonday[beforeMonday.length - 1]   // Friday's close
+        : obs[0];
       const monday = parseFloat(mondayObs.value);
       const mondayDate: string = mondayObs.date;
 

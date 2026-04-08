@@ -174,7 +174,7 @@ export default function YieldCurve() {
                 strokeDasharray="4 3"
                 dot={false}
                 connectNulls
-                name={`Mon ${fmtDate(data?.mondayDate ?? "")}`}
+                name={`Fri ${fmtDate(data?.mondayDate ?? "")}`}
               />
               {/* Latest — solid dark blue */}
               <Line
@@ -201,7 +201,7 @@ export default function YieldCurve() {
                   </span>
                 </div>
               ))}
-            <span className="text-zinc-300 text-xs ml-auto">vs Mon open</span>
+            <span className="text-zinc-300 text-xs ml-auto">vs Fri close</span>
           </div>
         </>
       )}
