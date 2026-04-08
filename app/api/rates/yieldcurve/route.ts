@@ -13,19 +13,19 @@ const TENORS = [
   { label: "30Y", id: "DGS30"  },
 ];
 
-// Returns YYYY-MM-DD for Monday of the current week (local)
+// Returns YYYY-MM-DD for Monday of the current week (UTC)
 function getMondayDate(): string {
   const now = new Date();
-  const day = now.getDay(); // 0=Sun … 6=Sat
+  const day = now.getUTCDay(); // 0=Sun … 6=Sat
   const daysBack = day === 0 ? 6 : day - 1;
   const monday = new Date(now);
-  monday.setDate(now.getDate() - daysBack);
+  monday.setUTCDate(now.getUTCDate() - daysBack);
   return monday.toISOString().slice(0, 10);
 }
 
 function getStartDate(): string {
   const d = new Date();
-  d.setDate(d.getDate() - 14);
+  d.setUTCDate(d.getUTCDate() - 21); // 3 weeks to be safe
   return d.toISOString().slice(0, 10);
 }
 
@@ -54,9 +54,13 @@ export async function GET() {
       const latest = parseFloat(latestObs.value);
       const latestDate: string = latestObs.date;
 
-      // Monday = first observation on or after Monday of this week
-      const thisWeek = obs.filter((o: any) => o.date >= mondayStr);
-      const mondayObs = thisWeek.length > 0 ? thisWeek[0] : obs[obs.length - 1];
+      // Monday reference = Monday's EOD if already published by FRED,
+      // otherwise Friday's close (FRED lags by ~1 day, so on Monday itself
+      // the data isn't available yet — Friday close is the best proxy).
+      const mondayExact = obs.find((o: any) => o.date === mondayStr);
+      const beforeMonday = obs.filter((o: any) => o.date < mondayStr);
+      const mondayObs = mondayExact
+        ?? (beforeMonday.length > 0 ? beforeMonday[beforeMonday.length - 1] : obs[0]);
       const monday = parseFloat(mondayObs.value);
       const mondayDate: string = mondayObs.date;
 
