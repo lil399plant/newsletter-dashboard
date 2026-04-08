@@ -76,35 +76,20 @@ function evenTicks(min: number, max: number, count = 5): number[] {
   return Array.from({ length: count }, (_, i) => min + i * step);
 }
 
-// ─── Realized volatility ─────────────────────────────────────────────────────
-
-// Rolling 21-day annualized realized volatility (%) from an array of closes.
-// Returns null for the first <window> points where there isn't enough history.
-function computeRV(closes: number[], window = 21): (number | null)[] {
-  const logRets = closes.map((c, i) => (i === 0 ? 0 : Math.log(c / closes[i - 1])));
-  return closes.map((_, i) => {
-    if (i < window) return null;
-    const slice = logRets.slice(i - window + 1, i + 1);
-    const mean = slice.reduce((a, b) => a + b, 0) / slice.length;
-    const variance = slice.reduce((s, r) => s + (r - mean) ** 2, 0) / slice.length;
-    return parseFloat((Math.sqrt(variance * 252) * 100).toFixed(2));
-  });
-}
-
 // ─── Custom tooltip ───────────────────────────────────────────────────────────
 
 function CustomTooltip({ active, payload, ticker }: any) {
   if (!active || !payload?.length) return null;
   const rawDate: string = payload[0]?.payload?.date ?? "";
   const price = payload.find((p: any) => p.dataKey === "close");
-  const rv = payload.find((p: any) => p.dataKey === "rv");
+  const vix = payload.find((p: any) => p.dataKey === "vix");
   const vol = payload.find((p: any) => p.dataKey === "volume");
 
   return (
     <div style={{ background: "#fff", border: "1px solid #e4e4e7", borderRadius: 6, padding: "7px 11px", fontSize: 10, fontFamily: "Times New Roman, serif" }}>
       <div style={{ color: "#a1a1aa", marginBottom: 4 }}>{fmtDate(rawDate)}</div>
       {price && <div style={{ color: "#1e3a8a" }}>Price: {fmtPrice(price.value, ticker)}</div>}
-      {rv?.value != null && <div style={{ color: "#b45309" }}>21d RV: {rv.value.toFixed(1)}%</div>}
+      {vix?.value != null && <div style={{ color: "#b45309" }}>VIX: {vix.value.toFixed(2)}</div>}
       {vol?.value > 0 && <div style={{ color: "#a1a1aa" }}>Vol: {fmtVol(vol.value)}</div>}
     </div>
   );
@@ -116,7 +101,7 @@ interface Row {
   date: string;
   close: number;
   volume: number | null;
-  rv: number | null;
+  vix: number | null;
 }
 
 export default function EquityChart() {
@@ -132,21 +117,28 @@ export default function EquityChart() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/equity/history?ticker=${encodeURIComponent(t)}&startDate=${start}`, { cache: "no-store" });
+      const [res, vixRes] = await Promise.all([
+        fetch(`/api/equity/history?ticker=${encodeURIComponent(t)}&startDate=${start}`, { cache: "no-store" }),
+        fetch(`/api/equity/history?ticker=%5EVIX&startDate=${start}`, { cache: "no-store" }),
+      ]);
       if (!res.ok) throw new Error(`API ${res.status}`);
       const data = await res.json();
       if (data.error) throw new Error(data.error);
 
+      // Build VIX lookup by date
+      const vixMap: Record<string, number> = {};
+      if (vixRes.ok) {
+        const vixData = await vixRes.json();
+        (vixData.rows ?? []).forEach((r: { date: string; close: number }) => {
+          vixMap[r.date] = r.close;
+        });
+      }
+
       const raw: { date: string; close: number; volume: number | null }[] = data.rows ?? [];
 
-      // Compute RV on the full dataset (including prefetch warmup period)
-      const allCloses = raw.map((r) => r.close);
-      const rvValues = computeRV(allCloses);
-
-      // Only display rows from the user's chosen start date onwards
-      const displayRows = raw
-        .map((r, i) => ({ ...r, rv: rvValues[i] }))
-        .filter((r) => r.date >= start);
+      const displayRows: Row[] = raw
+        .filter((r) => r.date >= start)
+        .map((r) => ({ ...r, vix: vixMap[r.date] ?? null }));
 
       setRows(displayRows);
     } catch (e: any) {
@@ -170,7 +162,6 @@ export default function EquityChart() {
 
   function handleTickerChange(val: string) {
     setTicker(val);
-    // immediately reload on index change
   }
 
   // ── Chart data ──
@@ -187,7 +178,7 @@ export default function EquityChart() {
 
   // Domains
   const closes = rows.map((r) => r.close);
-  const rvs = rows.map((r) => r.rv).filter((v): v is number => v !== null);
+  const vixValues = rows.map((r) => r.vix).filter((v): v is number => v !== null);
   const vols = rows.map((r) => r.volume ?? 0).filter((v) => v > 0);
   const maxVol = vols.length ? Math.max(...vols) : 0;
 
@@ -199,20 +190,20 @@ export default function EquityChart() {
   const pDomain: [number, number] = [pDomainMin, pDomainMax];
   const pTicks = evenTicks(pDomainMin, pDomainMax, 5);
 
-  const rvMin = rvs.length ? Math.min(...rvs) : 0;
-  const rvMax = rvs.length ? Math.max(...rvs) : 40;
-  const rvPad = Math.max((rvMax - rvMin) * 0.08, 0.5);
-  const rvDomainMin = Math.max(0, rvMin - rvPad);
-  const rvDomainMax = rvMax + rvPad;
-  const rvDomain: [number, number] = [rvDomainMin, rvDomainMax];
-  const rvTicks = evenTicks(rvDomainMin, rvDomainMax, 5);
+  const vixMin = vixValues.length ? Math.min(...vixValues) : 0;
+  const vixMax = vixValues.length ? Math.max(...vixValues) : 40;
+  const vixPad = Math.max((vixMax - vixMin) * 0.08, 0.5);
+  const vixDomainMin = Math.max(0, vixMin - vixPad);
+  const vixDomainMax = vixMax + vixPad;
+  const vixDomain: [number, number] = [vixDomainMin, vixDomainMax];
+  const vixTicks = evenTicks(vixDomainMin, vixDomainMax, 5);
 
   // Volume domain: inflate max 5× so bars only occupy bottom ~20%
   const volDomain: [number, number] = [0, maxVol * 5];
 
   const selectedLabel = INDICES.find((i) => i.ticker === ticker)?.label ?? ticker;
   const latestClose = rows[rows.length - 1]?.close;
-  const latestRV = rows[rows.length - 1]?.rv;
+  const latestVix = rows[rows.length - 1]?.vix;
   const latestDate = rows[rows.length - 1]?.date;
   const hasVolume = vols.length > 0;
 
@@ -255,9 +246,9 @@ export default function EquityChart() {
             <span className="text-sm font-bold text-zinc-800" style={{ fontFamily: "Times New Roman, serif" }}>
               {fmtPrice(latestClose, ticker)}
             </span>
-            {latestRV != null && (
+            {latestVix != null && (
               <span className="text-sm font-bold" style={{ color: "#b45309", fontFamily: "Times New Roman, serif" }}>
-                RV {latestRV.toFixed(1)}%
+                VIX {latestVix.toFixed(2)}
               </span>
             )}
           </div>
@@ -283,16 +274,16 @@ export default function EquityChart() {
               domain={volDomain}
             />
 
-            {/* Left: realized volatility */}
+            {/* Left: VIX */}
             <YAxis
-              yAxisId="rv"
+              yAxisId="vix"
               orientation="left"
-              domain={rvDomain}
-              ticks={rvTicks}
+              domain={vixDomain}
+              ticks={vixTicks}
               tick={{ fill: "#71717a", fontSize: 8, fontFamily: "Times New Roman, serif" }}
               tickLine={false}
               axisLine={false}
-              tickFormatter={(v) => `${v.toFixed(1)}%`}
+              tickFormatter={(v) => v.toFixed(1)}
               width={40}
             />
 
@@ -342,16 +333,16 @@ export default function EquityChart() {
               />
             )}
 
-            {/* Realized vol — amber, left axis */}
+            {/* VIX — amber, left axis */}
             <Line
-              yAxisId="rv"
+              yAxisId="vix"
               type="monotone"
-              dataKey="rv"
+              dataKey="vix"
               stroke="#b45309"
               strokeWidth={1.5}
               dot={false}
               connectNulls
-              name="21d RV"
+              name="VIX"
               isAnimationActive={false}
             />
 
