@@ -80,28 +80,32 @@ async function fetchQuoteSummary(ticker: string, crumb: string, cookie: string) 
   }
 }
 
-// ─── Yahoo chart: 1Y daily → 4W + 52W returns ────────────────────────────────
+// ─── Returns via our own /api/equity/history proxy (avoids 429) ──────────────
+// This route already works on Vercel — reuse it instead of hitting Yahoo directly.
 
-async function fetchReturns(ticker: string): Promise<{ ret4w: number | null; ret52w: number | null }> {
+async function fetchReturnsViaProxy(ticker: string, baseUrl: string): Promise<{ ret4w: number | null; ret52w: number | null }> {
+  // Fetch 1 year of daily data via our own working proxy
+  const oneYearAgo = new Date();
+  oneYearAgo.setUTCFullYear(oneYearAgo.getUTCFullYear() - 1);
+  const startDate = oneYearAgo.toISOString().slice(0, 10);
+
   try {
     const res = await fetch(
-      `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=1y`,
-      { headers: { "User-Agent": UA }, next: { revalidate: 0 } }
+      `${baseUrl}/api/equity/history?ticker=${encodeURIComponent(ticker)}&startDate=${startDate}`,
+      { next: { revalidate: 0 } }
     );
-    if (!res.ok) { console.error(`[sectors] chart ${ticker} HTTP ${res.status}`); return { ret4w: null, ret52w: null }; }
+    if (!res.ok) { console.error(`[sectors] proxy history ${ticker} HTTP ${res.status}`); return { ret4w: null, ret52w: null }; }
     const data = await res.json();
-    const closes: (number | null)[] =
-      data?.chart?.result?.[0]?.indicators?.adjclose?.[0]?.adjclose ??
-      data?.chart?.result?.[0]?.indicators?.quote?.[0]?.close ?? [];
-    const valid = closes.filter((c): c is number => c != null && c > 0);
-    if (valid.length < 2) return { ret4w: null, ret52w: null };
-    const last = valid[valid.length - 1];
-    return {
-      ret52w: (last / valid[0] - 1) * 100,
-      ret4w:  (last / valid[Math.max(0, valid.length - 20)] - 1) * 100,
-    };
+    const rows: { date: string; close: number }[] = data.rows ?? [];
+    if (rows.length < 2) return { ret4w: null, ret52w: null };
+
+    const last = rows[rows.length - 1].close;
+    const ret52w = (last / rows[0].close - 1) * 100;
+    const start4w = rows[Math.max(0, rows.length - 20)].close;
+    const ret4w = (last / start4w - 1) * 100;
+    return { ret4w, ret52w };
   } catch (e) {
-    console.error(`[sectors] chart ${ticker}:`, e);
+    console.error(`[sectors] proxy history ${ticker}:`, e);
     return { ret4w: null, ret52w: null };
   }
 }
@@ -128,9 +132,9 @@ async function fetch10YrYield(): Promise<number | null> {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-// ─── Core fetch — called only when cache is stale ────────────────────────────
+// ─── Core fetch ───────────────────────────────────────────────────────────────
 
-async function fetchFreshData(redis: Redis) {
+async function fetchFreshData(redis: Redis, baseUrl: string) {
   const [auth, tenYrYield] = await Promise.all([
     getYahooCrumb(redis),
     fetch10YrYield(),
@@ -140,7 +144,7 @@ async function fetchFreshData(redis: Redis) {
   for (const { label, ticker } of SECTORS) {
     const [summary, { ret4w, ret52w }] = await Promise.all([
       auth ? fetchQuoteSummary(ticker, auth.crumb, auth.cookie) : Promise.resolve(null),
-      fetchReturns(ticker),
+      fetchReturnsViaProxy(ticker, baseUrl),
     ]);
 
     const trailingPE: number | null =
@@ -159,7 +163,7 @@ async function fetchFreshData(redis: Redis) {
         ? parseFloat(((1 / forwardPE) * 100 - tenYrYield).toFixed(2)) : null;
 
     rows.push({ label, ticker, trailingPE, forwardPE, impliedEpsGrowth, profitMargin, ret52w, ret4w, erp });
-    await sleep(800); // generous gap between tickers
+    await sleep(500);
   }
 
   const payload = { rows, tenYrYield, cachedAt: new Date().toISOString() };
@@ -171,21 +175,18 @@ async function fetchFreshData(redis: Redis) {
 
 export async function GET(request: Request) {
   const redis = getRedis();
-  const { searchParams } = new URL(request.url);
+  const { searchParams, origin } = new URL(request.url);
   const bust = searchParams.get("bust") === "1";
 
-  // Serve from Redis cache unless cache-busting
   if (!bust) {
     try {
       const cached = await redis.get<any>(SECTORS_CACHE_KEY);
-      if (cached?.rows?.length) {
-        return Response.json(cached);
-      }
+      if (cached?.rows?.length) return Response.json(cached);
     } catch (e) {
-      console.error("[sectors] Redis cache read error:", e);
+      console.error("[sectors] Redis read:", e);
     }
   }
 
-  const data = await fetchFreshData(redis);
+  const data = await fetchFreshData(redis, origin);
   return Response.json(data);
 }
