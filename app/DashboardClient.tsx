@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import PolymarketLive from "./components/PolymarketLive";
+import YieldCurve from "./components/YieldCurve";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -194,40 +195,6 @@ function EquitiesSection({ m, c, showCommentary }: { m: EquityMetrics; c: Dashbo
   );
 }
 
-function RatesSection({ m, c, showCommentary }: { m: RateMetrics; c: Dashboard["commentary"]["rates"]; showCommentary: boolean }) {
-  return (
-    <section>
-      <SectionHeader label="Rates" />
-      <div className="grid grid-cols-2 gap-x-8">
-        <div>
-          {(["UST_2Y", "UST_5Y", "UST_10Y", "UST_30Y"] as const).map((k) => (
-            <MetricRow key={k} label={k.replace("UST_", "")}
-              value={<>
-                <span className="text-zinc-800">{m.levels[k]?.toFixed(2) ?? "—"}%</span>
-                <span className={`ml-2 text-xs ${chgColor(m.week_chg_bp[k])}`}>{fmt(m.week_chg_bp[k], 0, "bp")}</span>
-              </>}
-            />
-          ))}
-        </div>
-        <div>
-          <MetricRow label="2s10s" value={<span className={chgColor(m.curve_2s10s)}>{m.curve_2s10s?.toFixed(0) ?? "—"}bp</span>} sub={`${fmt(m.curve_chg_wow_bp, 0, "bp wow")}`} />
-          <MetricRow label="5s30s" value={`${m.curve_5s30s?.toFixed(0) ?? "—"}bp`} />
-          <MetricRow label="10Y real" value={`${m.real_10y?.toFixed(2) ?? "—"}%`} />
-          <MetricRow label="10Y BEI" value={`${m.breakeven_10y?.toFixed(2) ?? "—"}%`} />
-          <MetricRow label="10Y move: real" value={`${m.real_vs_nominal_split?.toFixed(0) ?? "—"}%`} />
-        </div>
-      </div>
-      {showCommentary && (
-        <>
-          <CommentaryBlock text={c.summary} />
-          <CommentaryBlock text={c.policy_pricing} />
-          <CommentaryBlock text={c.real_vs_nominal} />
-          <SoWhat text={c.so_what} />
-        </>
-      )}
-    </section>
-  );
-}
 
 function FxSection({ m, c, showCommentary }: { m: FxMetrics; c: Dashboard["commentary"]["fx"]; showCommentary: boolean }) {
   const FACTOR_COLORS: Record<string, string> = {
@@ -303,7 +270,7 @@ export default function DashboardClient({ dashboard, asOf }: { dashboard: Dashbo
 
       <div className="max-w-4xl mx-auto px-6 py-8 space-y-12">
         <EquitiesSection m={dashboard.metrics.equities} c={dashboard.commentary.equities} showCommentary={showCommentary} />
-        <RatesSection m={dashboard.metrics.rates} c={dashboard.commentary.rates} showCommentary={showCommentary} />
+        <YieldCurve />
         <FxSection m={dashboard.metrics.fx} c={dashboard.commentary.fx} showCommentary={showCommentary} />
         <PolymarketLive />
       </div>
