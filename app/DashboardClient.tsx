@@ -4,6 +4,7 @@ import { useState } from "react";
 import PolymarketLive from "./components/PolymarketLive";
 import YieldCurve from "./components/YieldCurve";
 import EquityChart from "./components/EquityChart";
+import SectorTable from "./components/SectorTable";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -228,6 +229,7 @@ export default function DashboardClient({ dashboard, asOf }: { dashboard: Dashbo
 
       <div className="max-w-4xl mx-auto px-6 py-8 space-y-12">
         <EquityChart />
+        <SectorTable />
         <YieldCurve />
         <FxSection m={dashboard.metrics.fx} c={dashboard.commentary.fx} showCommentary={showCommentary} />
         <PolymarketLive />
