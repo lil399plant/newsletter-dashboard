@@ -76,19 +76,35 @@ function evenTicks(min: number, max: number, count = 5): number[] {
   return Array.from({ length: count }, (_, i) => min + i * step);
 }
 
+// ─── Realized volatility ─────────────────────────────────────────────────────
+
+// Rolling 21-day annualized realized volatility (%) from an array of closes.
+// Returns null for the first <window> points where there isn't enough history.
+function computeRV(closes: number[], window = 21): (number | null)[] {
+  const logRets = closes.map((c, i) => (i === 0 ? 0 : Math.log(c / closes[i - 1])));
+  return closes.map((_, i) => {
+    if (i < window) return null;
+    const slice = logRets.slice(i - window + 1, i + 1);
+    const mean = slice.reduce((a, b) => a + b, 0) / slice.length;
+    const variance = slice.reduce((s, r) => s + (r - mean) ** 2, 0) / slice.length;
+    return parseFloat((Math.sqrt(variance * 252) * 100).toFixed(2));
+  });
+}
+
 // ─── Custom tooltip ───────────────────────────────────────────────────────────
 
 function CustomTooltip({ active, payload, ticker }: any) {
   if (!active || !payload?.length) return null;
-  // Use the raw `date` field from the data row, not the formatted `dateLabel`
   const rawDate: string = payload[0]?.payload?.date ?? "";
   const price = payload.find((p: any) => p.dataKey === "close");
+  const rv = payload.find((p: any) => p.dataKey === "rv");
   const vol = payload.find((p: any) => p.dataKey === "volume");
 
   return (
     <div style={{ background: "#fff", border: "1px solid #e4e4e7", borderRadius: 6, padding: "7px 11px", fontSize: 10, fontFamily: "Times New Roman, serif" }}>
       <div style={{ color: "#a1a1aa", marginBottom: 4 }}>{fmtDate(rawDate)}</div>
       {price && <div style={{ color: "#1e3a8a" }}>Price: {fmtPrice(price.value, ticker)}</div>}
+      {rv?.value != null && <div style={{ color: "#b45309" }}>21d RV: {rv.value.toFixed(1)}%</div>}
       {vol?.value > 0 && <div style={{ color: "#a1a1aa" }}>Vol: {fmtVol(vol.value)}</div>}
     </div>
   );
@@ -100,7 +116,7 @@ interface Row {
   date: string;
   close: number;
   volume: number | null;
-  pctChange: number;
+  rv: number | null;
 }
 
 export default function EquityChart() {
@@ -122,13 +138,17 @@ export default function EquityChart() {
       if (data.error) throw new Error(data.error);
 
       const raw: { date: string; close: number; volume: number | null }[] = data.rows ?? [];
-      const startClose = raw[0]?.close ?? 1;
-      setRows(
-        raw.map((r) => ({
-          ...r,
-          pctChange: parseFloat((((r.close - startClose) / startClose) * 100).toFixed(3)),
-        }))
-      );
+
+      // Compute RV on the full dataset (including prefetch warmup period)
+      const allCloses = raw.map((r) => r.close);
+      const rvValues = computeRV(allCloses);
+
+      // Only display rows from the user's chosen start date onwards
+      const displayRows = raw
+        .map((r, i) => ({ ...r, rv: rvValues[i] }))
+        .filter((r) => r.date >= start);
+
+      setRows(displayRows);
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -167,7 +187,7 @@ export default function EquityChart() {
 
   // Domains
   const closes = rows.map((r) => r.close);
-  const pcts = rows.map((r) => r.pctChange);
+  const rvs = rows.map((r) => r.rv).filter((v): v is number => v !== null);
   const vols = rows.map((r) => r.volume ?? 0).filter((v) => v > 0);
   const maxVol = vols.length ? Math.max(...vols) : 0;
 
@@ -179,20 +199,20 @@ export default function EquityChart() {
   const pDomain: [number, number] = [pDomainMin, pDomainMax];
   const pTicks = evenTicks(pDomainMin, pDomainMax, 5);
 
-  const pctMin = pcts.length ? Math.min(...pcts) : -10;
-  const pctMax = pcts.length ? Math.max(...pcts) : 10;
-  const pctPad = Math.max((pctMax - pctMin) * 0.08, 0.5);
-  const pctDomainMin = pctMin - pctPad;
-  const pctDomainMax = pctMax + pctPad;
-  const pctDomain: [number, number] = [pctDomainMin, pctDomainMax];
-  const pctTicks = evenTicks(pctDomainMin, pctDomainMax, 5);
+  const rvMin = rvs.length ? Math.min(...rvs) : 0;
+  const rvMax = rvs.length ? Math.max(...rvs) : 40;
+  const rvPad = Math.max((rvMax - rvMin) * 0.08, 0.5);
+  const rvDomainMin = Math.max(0, rvMin - rvPad);
+  const rvDomainMax = rvMax + rvPad;
+  const rvDomain: [number, number] = [rvDomainMin, rvDomainMax];
+  const rvTicks = evenTicks(rvDomainMin, rvDomainMax, 5);
 
   // Volume domain: inflate max 5× so bars only occupy bottom ~20%
   const volDomain: [number, number] = [0, maxVol * 5];
 
   const selectedLabel = INDICES.find((i) => i.ticker === ticker)?.label ?? ticker;
   const latestClose = rows[rows.length - 1]?.close;
-  const totalReturn = rows[rows.length - 1]?.pctChange;
+  const latestRV = rows[rows.length - 1]?.rv;
   const latestDate = rows[rows.length - 1]?.date;
   const hasVolume = vols.length > 0;
 
@@ -235,12 +255,9 @@ export default function EquityChart() {
             <span className="text-sm font-bold text-zinc-800" style={{ fontFamily: "Times New Roman, serif" }}>
               {fmtPrice(latestClose, ticker)}
             </span>
-            {totalReturn != null && (
-              <span
-                className="text-sm font-bold"
-                style={{ color: totalReturn >= 0 ? "#059669" : "#dc2626", fontFamily: "Times New Roman, serif" }}
-              >
-                {totalReturn >= 0 ? "+" : ""}{totalReturn.toFixed(2)}%
+            {latestRV != null && (
+              <span className="text-sm font-bold" style={{ color: "#b45309", fontFamily: "Times New Roman, serif" }}>
+                RV {latestRV.toFixed(1)}%
               </span>
             )}
           </div>
@@ -266,17 +283,17 @@ export default function EquityChart() {
               domain={volDomain}
             />
 
-            {/* Left: % change */}
+            {/* Left: realized volatility */}
             <YAxis
-              yAxisId="pct"
+              yAxisId="rv"
               orientation="left"
-              domain={pctDomain}
-              ticks={pctTicks}
+              domain={rvDomain}
+              ticks={rvTicks}
               tick={{ fill: "#71717a", fontSize: 8, fontFamily: "Times New Roman, serif" }}
               tickLine={false}
               axisLine={false}
-              tickFormatter={(v) => `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`}
-              width={48}
+              tickFormatter={(v) => `${v.toFixed(1)}%`}
+              width={40}
             />
 
             {/* Right: price */}
@@ -325,17 +342,16 @@ export default function EquityChart() {
               />
             )}
 
-            {/* % change — dashed, left axis */}
+            {/* Realized vol — amber, left axis */}
             <Line
-              yAxisId="pct"
+              yAxisId="rv"
               type="monotone"
-              dataKey="pctChange"
-              stroke="#6b7280"
+              dataKey="rv"
+              stroke="#b45309"
               strokeWidth={1.5}
-              strokeDasharray="5 3"
               dot={false}
               connectNulls
-              name="Return %"
+              name="21d RV"
               isAnimationActive={false}
             />
 

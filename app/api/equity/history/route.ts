@@ -5,9 +5,13 @@ export async function GET(request: Request) {
   const ticker = searchParams.get("ticker") ?? "^GSPC";
   const startDate = searchParams.get("startDate");
 
-  const period1 = startDate
-    ? Math.floor(new Date(startDate + "T00:00:00Z").getTime() / 1000)
-    : Math.floor(Date.now() / 1000) - 365 * 86400;
+  // Fetch 40 extra calendar days before startDate so the component has
+  // enough history to compute a full 21-day RV window from day one.
+  const baseDate = startDate
+    ? new Date(startDate + "T00:00:00Z")
+    : new Date(Date.now() - 365 * 86400 * 1000);
+  baseDate.setUTCDate(baseDate.getUTCDate() - 40);
+  const period1 = Math.floor(baseDate.getTime() / 1000);
   const period2 = Math.floor(Date.now() / 1000);
 
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&period1=${period1}&period2=${period2}&includePrePost=false`;
