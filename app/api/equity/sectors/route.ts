@@ -19,9 +19,9 @@ const SECTORS = [
 
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 const CRUMB_KEY = "yahoo:crumb";
-const CRUMB_TTL = 55 * 60; // 55 minutes in seconds
+const CRUMB_TTL = 55 * 60;
 
-// ─── Yahoo crumb — cached in Redis across all Vercel instances ────────────────
+// ─── Yahoo crumb — shared across all Vercel instances via Redis ───────────────
 
 async function getYahooCrumb(): Promise<{ crumb: string; cookie: string } | null> {
   let redis: Redis | null = null;
@@ -33,14 +33,12 @@ async function getYahooCrumb(): Promise<{ crumb: string; cookie: string } | null
     console.error("[sectors] Redis read error:", e);
   }
 
-  // Fetch a fresh crumb
   try {
     const homeRes = await fetch("https://finance.yahoo.com/", {
       headers: { "User-Agent": UA, "Accept": "text/html" },
       redirect: "follow",
     });
 
-    // Extract cookies — Node 18+ has getSetCookie(), older versions don't
     let cookieParts: string[] = [];
     if (typeof (homeRes.headers as any).getSetCookie === "function") {
       cookieParts = (homeRes.headers as any).getSetCookie().map((c: string) => c.split(";")[0]);
@@ -49,56 +47,35 @@ async function getYahooCrumb(): Promise<{ crumb: string; cookie: string } | null
       cookieParts = raw.split(",").map((c) => c.trim().split(";")[0]).filter(Boolean);
     }
     const cookie = cookieParts.join("; ");
-    if (!cookie) {
-      console.error("[sectors] No cookie from Yahoo");
-      return null;
-    }
+    if (!cookie) { console.error("[sectors] No cookie from Yahoo"); return null; }
 
     const crumbRes = await fetch("https://query1.finance.yahoo.com/v1/test/getcrumb", {
       headers: { "User-Agent": UA, "Cookie": cookie },
     });
     const crumb = await crumbRes.text();
-
-    // Valid crumb: short alphanumeric, no spaces/JSON/HTML
     if (!crumb || crumb.includes("{") || crumb.includes(" ") || crumb.includes("<") || crumb.length > 30) {
-      console.error("[sectors] Bad crumb response:", crumb?.slice(0, 100));
+      console.error("[sectors] Bad crumb:", crumb?.slice(0, 80));
       return null;
     }
 
-    console.log("[sectors] Fresh crumb obtained:", crumb);
     const payload = { crumb, cookie };
-
-    // Store in Redis for all instances
-    try {
-      await redis?.set(CRUMB_KEY, payload, { ex: CRUMB_TTL });
-    } catch (e) {
-      console.error("[sectors] Redis write error:", e);
-    }
-
+    try { await redis?.set(CRUMB_KEY, payload, { ex: CRUMB_TTL }); } catch {}
     return payload;
   } catch (e) {
-    console.error("[sectors] Crumb fetch error:", e);
+    console.error("[sectors] Crumb error:", e);
     return null;
   }
 }
 
-// ─── Yahoo quoteSummary: P/E, margin, 52W ────────────────────────────────────
+// ─── Yahoo quoteSummary: P/E and margin ──────────────────────────────────────
 
 async function fetchQuoteSummary(ticker: string, crumb: string, cookie: string) {
   const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(ticker)}?modules=summaryDetail,defaultKeyStatistics,financialData&crumb=${encodeURIComponent(crumb)}`;
   try {
-    const res = await fetch(url, {
-      headers: { "User-Agent": UA, "Cookie": cookie },
-      next: { revalidate: 0 },
-    });
-    if (!res.ok) {
-      console.error(`[sectors] quoteSummary ${ticker} HTTP ${res.status}`);
-      return null;
-    }
+    const res = await fetch(url, { headers: { "User-Agent": UA, "Cookie": cookie }, next: { revalidate: 0 } });
+    if (!res.ok) { console.error(`[sectors] quoteSummary ${ticker} HTTP ${res.status}`); return null; }
     const data = await res.json();
-    if (data?.quoteSummary?.error) {
-      console.error(`[sectors] quoteSummary ${ticker} error:`, JSON.stringify(data.quoteSummary.error));
-    }
+    if (data?.quoteSummary?.error) console.error(`[sectors] quoteSummary ${ticker}:`, JSON.stringify(data.quoteSummary.error).slice(0, 100));
     return data?.quoteSummary?.result?.[0] ?? null;
   } catch (e) {
     console.error(`[sectors] quoteSummary ${ticker} threw:`, e);
@@ -106,44 +83,43 @@ async function fetchQuoteSummary(ticker: string, crumb: string, cookie: string) 
   }
 }
 
-// ─── Yahoo chart: 4W and 52W returns (no crumb needed) ───────────────────────
+// ─── Yahoo chart: single 1Y daily request → both 4W and 52W returns ──────────
+// One request per ticker instead of two — halves Yahoo load from Vercel.
 
 async function fetchReturns(ticker: string): Promise<{ ret4w: number | null; ret52w: number | null }> {
-  const fetch1Y = fetch(
-    `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1wk&range=1y`,
-    { headers: { "User-Agent": UA }, next: { revalidate: 0 } }
-  );
-  const fetch1M = fetch(
-    `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=1mo`,
-    { headers: { "User-Agent": UA }, next: { revalidate: 0 } }
-  );
-
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=1y`;
   try {
-    const [res1y, res1m] = await Promise.all([fetch1Y, fetch1M]);
+    const res = await fetch(url, { headers: { "User-Agent": UA }, next: { revalidate: 0 } });
+    if (!res.ok) {
+      console.error(`[sectors] chart ${ticker} HTTP ${res.status}`);
+      return { ret4w: null, ret52w: null };
+    }
+    const data = await res.json();
+    const result = data?.chart?.result?.[0];
+    if (!result) {
+      console.error(`[sectors] chart ${ticker} no result, error:`, JSON.stringify(data?.chart?.error).slice(0, 100));
+      return { ret4w: null, ret52w: null };
+    }
+    const closes: (number | null)[] =
+      result.indicators?.adjclose?.[0]?.adjclose ??
+      result.indicators?.quote?.[0]?.close ?? [];
+    const valid = closes.filter((c): c is number => c != null && c > 0);
 
-    let ret52w: number | null = null;
-    if (res1y.ok) {
-      const d = await res1y.json();
-      const closes: (number | null)[] =
-        d?.chart?.result?.[0]?.indicators?.adjclose?.[0]?.adjclose ??
-        d?.chart?.result?.[0]?.indicators?.quote?.[0]?.close ?? [];
-      const valid = closes.filter((c): c is number => c != null && c > 0);
-      if (valid.length >= 2) ret52w = (valid[valid.length - 1] / valid[0] - 1) * 100;
+    if (valid.length < 2) {
+      console.error(`[sectors] chart ${ticker} insufficient data: ${valid.length} closes`);
+      return { ret4w: null, ret52w: null };
     }
 
-    let ret4w: number | null = null;
-    if (res1m.ok) {
-      const d = await res1m.json();
-      const closes: (number | null)[] =
-        d?.chart?.result?.[0]?.indicators?.adjclose?.[0]?.adjclose ??
-        d?.chart?.result?.[0]?.indicators?.quote?.[0]?.close ?? [];
-      const valid = closes.filter((c): c is number => c != null && c > 0);
-      if (valid.length >= 2) ret4w = (valid[valid.length - 1] / valid[0] - 1) * 100;
-    }
+    const last = valid[valid.length - 1];
+    // 52W: first to last price in the 1Y window
+    const ret52w = (last / valid[0] - 1) * 100;
+    // 4W: approximately last 20 trading days
+    const start4w = valid[Math.max(0, valid.length - 20)];
+    const ret4w = (last / start4w - 1) * 100;
 
     return { ret4w, ret52w };
   } catch (e) {
-    console.error(`[sectors] returns ${ticker} threw:`, e);
+    console.error(`[sectors] chart ${ticker} threw:`, e);
     return { ret4w: null, ret52w: null };
   }
 }
@@ -165,12 +141,10 @@ async function fetch10YrYield(): Promise<number | null> {
       }
     } catch {}
   }
-  // Fallback: ^TNX (value like 43.3 = 4.33%)
   try {
-    const res = await fetch(
-      `https://query1.finance.yahoo.com/v8/finance/chart/%5ETNX?interval=1d&range=5d`,
-      { headers: { "User-Agent": UA }, next: { revalidate: 0 } }
-    );
+    const res = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/%5ETNX?interval=1d&range=5d`, {
+      headers: { "User-Agent": UA }, next: { revalidate: 0 }
+    });
     if (!res.ok) return null;
     const data = await res.json();
     const closes: (number | null)[] =
@@ -178,12 +152,8 @@ async function fetch10YrYield(): Promise<number | null> {
       data?.chart?.result?.[0]?.indicators?.quote?.[0]?.close ?? [];
     const valid = closes.filter((c): c is number => c != null && c > 0);
     return valid.length ? valid[valid.length - 1] / 10 : null;
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
-
-// ─── Small delay helper ───────────────────────────────────────────────────────
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -195,28 +165,15 @@ export async function GET() {
     fetch10YrYield(),
   ]);
 
-  // Fetch in batches of 3 with 400ms gaps to avoid Yahoo rate limiting
-  const summaries: (any | null)[] = [];
-  const returns: { ret4w: number | null; ret52w: number | null }[] = [];
+  // Fetch one ticker at a time with a gap — 12 sequential requests is still fast
+  // (~15s total) and avoids Yahoo rate-limiting from Vercel's shared IPs.
+  const results: Array<{ label: string; ticker: string; trailingPE: number | null; forwardPE: number | null; impliedEpsGrowth: number | null; profitMargin: number | null; ret52w: number | null; ret4w: number | null; erp: number | null }> = [];
 
-  for (let i = 0; i < SECTORS.length; i += 3) {
-    const batch = SECTORS.slice(i, i + 3);
-    const batchResults = await Promise.all(
-      batch.map(({ ticker }) => Promise.all([
-        auth ? fetchQuoteSummary(ticker, auth.crumb, auth.cookie) : Promise.resolve(null),
-        fetchReturns(ticker),
-      ]))
-    );
-    for (const [summary, ret] of batchResults) {
-      summaries.push(summary);
-      returns.push(ret);
-    }
-    if (i + 3 < SECTORS.length) await sleep(400);
-  }
-
-  const rows = SECTORS.map(({ label, ticker }, i) => {
-    const summary = summaries[i];
-    const { ret4w, ret52w } = returns[i];
+  for (const { label, ticker } of SECTORS) {
+    const [summary, { ret4w, ret52w }] = await Promise.all([
+      auth ? fetchQuoteSummary(ticker, auth.crumb, auth.cookie) : Promise.resolve(null),
+      fetchReturns(ticker),
+    ]);
 
     const trailingPE: number | null =
       summary?.summaryDetail?.trailingPE?.raw ??
@@ -231,16 +188,15 @@ export async function GET() {
 
     const impliedEpsGrowth: number | null =
       trailingPE != null && forwardPE != null && forwardPE > 0
-        ? (trailingPE / forwardPE - 1) * 100
-        : null;
+        ? (trailingPE / forwardPE - 1) * 100 : null;
 
     const erp =
       forwardPE != null && tenYrYield != null
-        ? parseFloat(((1 / forwardPE) * 100 - tenYrYield).toFixed(2))
-        : null;
+        ? parseFloat(((1 / forwardPE) * 100 - tenYrYield).toFixed(2)) : null;
 
-    return { label, ticker, trailingPE, forwardPE, impliedEpsGrowth, profitMargin, ret52w, ret4w, erp };
-  });
+    results.push({ label, ticker, trailingPE, forwardPE, impliedEpsGrowth, profitMargin, ret52w, ret4w, erp });
+    await sleep(500);
+  }
 
-  return Response.json({ rows, tenYrYield });
+  return Response.json({ rows: results, tenYrYield });
 }
