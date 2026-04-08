@@ -69,19 +69,26 @@ function fmtVol(v: number): string {
   return String(v);
 }
 
+// ─── Evenly spaced ticks ─────────────────────────────────────────────────────
+
+function evenTicks(min: number, max: number, count = 5): number[] {
+  const step = (max - min) / (count - 1);
+  return Array.from({ length: count }, (_, i) => min + i * step);
+}
+
 // ─── Custom tooltip ───────────────────────────────────────────────────────────
 
-function CustomTooltip({ active, payload, label, ticker }: any) {
+function CustomTooltip({ active, payload, ticker }: any) {
   if (!active || !payload?.length) return null;
+  // Use the raw `date` field from the data row, not the formatted `dateLabel`
+  const rawDate: string = payload[0]?.payload?.date ?? "";
   const price = payload.find((p: any) => p.dataKey === "close");
-  const pct = payload.find((p: any) => p.dataKey === "pctChange");
   const vol = payload.find((p: any) => p.dataKey === "volume");
 
   return (
     <div style={{ background: "#fff", border: "1px solid #e4e4e7", borderRadius: 6, padding: "7px 11px", fontSize: 10, fontFamily: "Times New Roman, serif" }}>
-      <div style={{ color: "#a1a1aa", marginBottom: 4 }}>{fmtDate(label)}</div>
+      <div style={{ color: "#a1a1aa", marginBottom: 4 }}>{fmtDate(rawDate)}</div>
       {price && <div style={{ color: "#1e3a8a" }}>Price: {fmtPrice(price.value, ticker)}</div>}
-      {pct && <div style={{ color: pct.value >= 0 ? "#059669" : "#dc2626" }}>Return: {pct.value >= 0 ? "+" : ""}{pct.value.toFixed(2)}%</div>}
       {vol?.value > 0 && <div style={{ color: "#a1a1aa" }}>Vol: {fmtVol(vol.value)}</div>}
     </div>
   );
@@ -166,16 +173,22 @@ export default function EquityChart() {
 
   const priceMin = closes.length ? Math.min(...closes) : 0;
   const priceMax = closes.length ? Math.max(...closes) : 1;
-  const pricePad = (priceMax - priceMin) * 0.06;
-  const pDomain = [priceMin - pricePad, priceMax + pricePad];
+  const pricePad = (priceMax - priceMin) * 0.08;
+  const pDomainMin = priceMin - pricePad;
+  const pDomainMax = priceMax + pricePad;
+  const pDomain: [number, number] = [pDomainMin, pDomainMax];
+  const pTicks = evenTicks(pDomainMin, pDomainMax, 5);
 
   const pctMin = pcts.length ? Math.min(...pcts) : -10;
   const pctMax = pcts.length ? Math.max(...pcts) : 10;
-  const pctPad = Math.max((pctMax - pctMin) * 0.06, 0.5);
-  const pctDomain = [pctMin - pctPad, pctMax + pctPad];
+  const pctPad = Math.max((pctMax - pctMin) * 0.08, 0.5);
+  const pctDomainMin = pctMin - pctPad;
+  const pctDomainMax = pctMax + pctPad;
+  const pctDomain: [number, number] = [pctDomainMin, pctDomainMax];
+  const pctTicks = evenTicks(pctDomainMin, pctDomainMax, 5);
 
   // Volume domain: inflate max 5× so bars only occupy bottom ~20%
-  const volDomain = [0, maxVol * 5];
+  const volDomain: [number, number] = [0, maxVol * 5];
 
   const selectedLabel = INDICES.find((i) => i.ticker === ticker)?.label ?? ticker;
   const latestClose = rows[rows.length - 1]?.close;
@@ -258,6 +271,7 @@ export default function EquityChart() {
               yAxisId="pct"
               orientation="left"
               domain={pctDomain}
+              ticks={pctTicks}
               tick={{ fill: "#71717a", fontSize: 8, fontFamily: "Times New Roman, serif" }}
               tickLine={false}
               axisLine={false}
@@ -270,6 +284,7 @@ export default function EquityChart() {
               yAxisId="price"
               orientation="right"
               domain={pDomain}
+              ticks={pTicks}
               tick={{ fill: "#71717a", fontSize: 8, fontFamily: "Times New Roman, serif" }}
               tickLine={false}
               axisLine={false}
