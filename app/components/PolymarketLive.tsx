@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import {
   LineChart,
   Line,
@@ -119,11 +119,30 @@ function parseEvents(data: any): MarketEvent[] {
   return result;
 }
 
-async function fetchEvents(q?: string): Promise<MarketEvent[]> {
-  const url = q ? `/api/polymarket/events?q=${encodeURIComponent(q)}&limit=50` : "/api/polymarket/events?limit=100";
-  const res = await fetch(url, { cache: "no-store" });
+async function fetchEvents(): Promise<MarketEvent[]> {
+  const res = await fetch("/api/polymarket/events?limit=200", { cache: "no-store" });
   if (!res.ok) throw new Error(`Gamma API ${res.status}`);
   return parseEvents(await res.json());
+}
+
+function searchEvents(pool: MarketEvent[], query: string): MarketEvent[] {
+  const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (terms.length === 0) return pool.slice(0, 10);
+
+  return pool
+    .map((ev) => {
+      const title = ev.title.toLowerCase();
+      const matchCount = terms.filter((t) => title.includes(t)).length;
+      return { ev, matchCount };
+    })
+    .filter(({ matchCount }) => matchCount > 0)
+    .sort((a, b) => {
+      // Primary: how many terms matched; secondary: 24h volume
+      if (b.matchCount !== a.matchCount) return b.matchCount - a.matchCount;
+      return b.ev.volume24hr - a.ev.volume24hr;
+    })
+    .slice(0, 10)
+    .map(({ ev }) => ev);
 }
 
 async function fetchHistory(tokenId: string): Promise<HistoryPoint[]> {
@@ -266,20 +285,20 @@ function MarketChart({ event }: { event: MarketEvent }) {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 export default function PolymarketLive() {
+  const [pool, setPool] = useState<MarketEvent[]>([]);
   const [selected, setSelected] = useState<MarketEvent | null>(null);
   const [query, setQuery] = useState("");
   const [suggestions, setSuggestions] = useState<MarketEvent[]>([]);
   const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [searching, setSearching] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [bootstrapping, setBootstrapping] = useState(true);
 
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
-  // Load default (highest-volume qualifying market) on mount
+  // Load full pool once on mount
   useEffect(() => {
     fetchEvents().then((evs) => {
+      setPool(evs);
       if (evs.length > 0) {
         setSelected(evs[0]);
         setQuery(evs[0].title);
@@ -289,31 +308,18 @@ export default function PolymarketLive() {
     }).catch(() => setBootstrapping(false));
   }, []);
 
-  // Debounced search on keystroke
+  // Client-side search — instant, no API call
   useEffect(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-
-    if (!query.trim()) {
+    const trimmed = query.trim();
+    if (!trimmed || pool.length === 0) {
       setSuggestions([]);
       setDropdownOpen(false);
       return;
     }
-
-    debounceRef.current = setTimeout(async () => {
-      setSearching(true);
-      try {
-        const evs = await fetchEvents(query.trim());
-        setSuggestions(evs.slice(0, 10));
-        setDropdownOpen(true);
-      } catch {
-        setSuggestions([]);
-      } finally {
-        setSearching(false);
-      }
-    }, 300);
-
-    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-  }, [query]);
+    const results = searchEvents(pool, trimmed);
+    setSuggestions(results);
+    setDropdownOpen(results.length > 0);
+  }, [query, pool]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -360,9 +366,6 @@ export default function PolymarketLive() {
             placeholder="search markets…"
             className="w-full bg-zinc-900 border border-zinc-700 rounded-md px-3 py-2 text-xs font-mono text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-zinc-500 pr-8"
           />
-          {searching && (
-            <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-600 text-xs font-mono animate-pulse">…</span>
-          )}
         </div>
 
         {/* Dropdown */}
