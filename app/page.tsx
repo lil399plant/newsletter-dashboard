@@ -24,11 +24,11 @@ export default async function DashboardPage() {
     <main className="min-h-screen">
       {!dashboard ? (
         <>
-          <div className="border-b border-zinc-800 px-6 py-4">
-            <h1 className="text-lg font-semibold tracking-tight text-zinc-100">Market Dashboard</h1>
-            <p className="text-xs text-zinc-600 font-mono mt-0.5">Weekly trader-note · updated every Friday close</p>
+          <div className="border-b border-zinc-200 px-6 py-4">
+            <h1 className="text-lg font-semibold tracking-tight text-blue-900">Market Dashboard</h1>
+            <p className="text-xs text-zinc-400 mt-0.5">Weekly trader-note · updated every Friday close</p>
           </div>
-          <div className="flex items-center justify-center h-96 text-zinc-600 font-mono text-sm">
+          <div className="flex items-center justify-center h-96 text-zinc-400 text-sm">
             No data yet — trigger /api/pipeline to run the first collection.
           </div>
         </>

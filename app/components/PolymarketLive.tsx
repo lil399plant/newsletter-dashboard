@@ -162,12 +162,12 @@ function fmtVol(v: number): string {
 
 // ─── Colors ───────────────────────────────────────────────────────────────────
 
-const LINE_COLORS = ["#34d399", "#60a5fa", "#f472b6", "#fbbf24", "#a78bfa"];
+const LINE_COLORS = ["#1d4ed8", "#059669", "#dc2626", "#d97706", "#7c3aed"];
 
 function probColor(p: number): string {
-  if (p >= 0.7) return "#34d399";
-  if (p >= 0.4) return "#fbbf24";
-  return "#f87171";
+  if (p >= 0.7) return "#059669";
+  if (p >= 0.4) return "#d97706";
+  return "#dc2626";
 }
 
 // ─── Chart ────────────────────────────────────────────────────────────────────
@@ -225,14 +225,14 @@ function MarketChart({ event }: { event: MarketEvent }) {
   });
 
   return (
-    <div className="border border-zinc-800 rounded-lg p-4 bg-zinc-950/40">
+    <div className="border border-zinc-200 rounded-lg p-4 bg-zinc-50">
       <div className="flex items-start justify-between mb-3 gap-3">
-        <p className="text-xs text-zinc-200 font-mono leading-snug flex-1">{event.title}</p>
+        <p className="text-xs text-zinc-700 leading-snug flex-1">{event.title}</p>
         <div className="flex flex-col items-end gap-0.5 shrink-0">
           {currentProbs.map((cp, i) => (
-            <span key={cp.label} className="text-sm font-mono font-bold tabular-nums"
+            <span key={cp.label} className="text-sm font-bold tabular-nums"
               style={{ color: event.isMulti ? LINE_COLORS[i % LINE_COLORS.length] : probColor(cp.prob) }}>
-              {event.isMulti && <span className="text-xs font-normal text-zinc-500 mr-1">{cp.label.slice(0, 12)}</span>}
+              {event.isMulti && <span className="text-xs font-normal text-zinc-400 mr-1">{cp.label.slice(0, 12)}</span>}
               {(cp.prob * 100).toFixed(0)}%
             </span>
           ))}
@@ -241,33 +241,33 @@ function MarketChart({ event }: { event: MarketEvent }) {
 
       {loading ? (
         <div className="h-36 flex items-center justify-center">
-          <span className="text-xs text-zinc-700 font-mono animate-pulse">loading history…</span>
+          <span className="text-xs text-zinc-400 animate-pulse">loading history…</span>
         </div>
       ) : chartData.length < 2 ? (
         <div className="h-36 flex items-center justify-center">
-          <span className="text-xs text-zinc-700 font-mono">no history available</span>
+          <span className="text-xs text-zinc-400">no history available</span>
         </div>
       ) : (
         <ResponsiveContainer width="100%" height={160}>
           <LineChart data={chartData} margin={{ top: 2, right: 4, bottom: 4, left: -18 }}>
             <XAxis dataKey="time"
-              tick={{ fill: "#52525b", fontSize: 9, fontFamily: "monospace" }}
+              tick={{ fill: "#71717a", fontSize: 9, fontFamily: "Times New Roman, serif" }}
               tickLine={false} axisLine={false}
               interval={tickInterval} height={20}
             />
             <YAxis domain={[0, 100]}
-              tick={{ fill: "#3f3f46", fontSize: 8, fontFamily: "monospace" }}
+              tick={{ fill: "#a1a1aa", fontSize: 8, fontFamily: "Times New Roman, serif" }}
               tickLine={false} axisLine={false}
               tickFormatter={(v) => `${v}%`}
             />
             <Tooltip
-              contentStyle={{ background: "#09090b", border: "1px solid #27272a", borderRadius: 6, fontSize: 10, fontFamily: "monospace", padding: "6px 10px" }}
-              itemStyle={{ color: "#e4e4e7" }}
-              labelStyle={{ color: "#52525b", marginBottom: 3 }}
+              contentStyle={{ background: "#ffffff", border: "1px solid #e4e4e7", borderRadius: 6, fontSize: 10, fontFamily: "Times New Roman, serif", padding: "6px 10px" }}
+              itemStyle={{ color: "#3f3f46" }}
+              labelStyle={{ color: "#a1a1aa", marginBottom: 3 }}
               formatter={(v: number, name: string) => [`${v}%`, name]}
             />
             {event.isMulti && (
-              <Legend wrapperStyle={{ fontSize: 8, fontFamily: "monospace", paddingTop: 4 }} iconType="plainline" iconSize={10} />
+              <Legend wrapperStyle={{ fontSize: 8, fontFamily: "Times New Roman, serif", paddingTop: 4 }} iconType="plainline" iconSize={10} />
             )}
             {histories.map((h, i) => (
               <Line key={h.label} type="monotone" dataKey={h.label}
@@ -343,12 +343,12 @@ export default function PolymarketLive() {
     <section>
       {/* Header */}
       <div className="flex items-center gap-3 mb-4">
-        <span className="text-xs font-mono font-bold tracking-widest text-zinc-500 uppercase">
+        <span className="text-xs font-bold tracking-widest text-blue-900 uppercase">
           Prediction Markets · Polymarket
         </span>
-        <div className="flex-1 h-px bg-zinc-800" />
+        <div className="flex-1 h-px bg-zinc-300" />
         {lastUpdate && (
-          <span className="text-xs text-zinc-700 font-mono">
+          <span className="text-xs text-zinc-400">
             {lastUpdate.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false })}
           </span>
         )}
@@ -364,21 +364,21 @@ export default function PolymarketLive() {
             onChange={(e) => setQuery(e.target.value)}
             onFocus={() => { if (suggestions.length > 0) setDropdownOpen(true); }}
             placeholder="search markets…"
-            className="w-full bg-zinc-900 border border-zinc-700 rounded-md px-3 py-2 text-xs font-mono text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-zinc-500 pr-8"
+            className="w-full bg-white border border-zinc-300 rounded-md px-3 py-2 text-xs text-zinc-700 placeholder-zinc-400 focus:outline-none focus:border-blue-400"
           />
         </div>
 
         {/* Dropdown */}
         {dropdownOpen && suggestions.length > 0 && (
-          <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-zinc-900 border border-zinc-700 rounded-md shadow-xl overflow-hidden">
+          <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-white border border-zinc-200 rounded-md shadow-lg overflow-hidden">
             {suggestions.map((ev, i) => (
               <button
                 key={ev.id}
                 onMouseDown={() => selectMarket(ev)}
-                className="w-full text-left px-3 py-2 flex items-center justify-between gap-3 hover:bg-zinc-800 transition-colors border-b border-zinc-800 last:border-0"
+                className="w-full text-left px-3 py-2 flex items-center justify-between gap-3 hover:bg-zinc-50 transition-colors border-b border-zinc-100 last:border-0"
               >
-                <span className="text-xs font-mono text-zinc-200 leading-snug flex-1 truncate">{ev.title}</span>
-                <span className="text-xs font-mono text-zinc-600 shrink-0">{fmtVol(ev.volume24hr)}</span>
+                <span className="text-xs text-zinc-700 leading-snug flex-1 truncate">{ev.title}</span>
+                <span className="text-xs text-zinc-400 shrink-0">{fmtVol(ev.volume24hr)}</span>
               </button>
             ))}
           </div>
@@ -388,13 +388,13 @@ export default function PolymarketLive() {
       {/* Chart area */}
       {bootstrapping ? (
         <div className="h-40 flex items-center justify-center">
-          <span className="text-xs text-zinc-600 font-mono animate-pulse">fetching markets…</span>
+          <span className="text-xs text-zinc-400 animate-pulse">fetching markets…</span>
         </div>
       ) : selected ? (
         <MarketChart key={selected.id} event={selected} />
       ) : (
-        <div className="h-40 border border-zinc-800 rounded-lg flex items-center justify-center">
-          <span className="text-xs text-zinc-600 font-mono">search for a market above</span>
+        <div className="h-40 border border-zinc-200 rounded-lg flex items-center justify-center">
+          <span className="text-xs text-zinc-400">search for a market above</span>
         </div>
       )}
     </section>

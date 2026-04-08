@@ -3,7 +3,7 @@
 import { useState } from "react";
 import PolymarketLive from "./components/PolymarketLive";
 
-// ─── Types (mirrored from page.tsx) ───────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface EquityMetrics {
   levels: Record<string, number>;
@@ -76,7 +76,7 @@ export interface Dashboard {
 
 function chgColor(val: number | undefined | null) {
   if (val == null || isNaN(val)) return "text-zinc-400";
-  return val > 0 ? "text-emerald-400" : val < 0 ? "text-red-400" : "text-zinc-400";
+  return val > 0 ? "text-emerald-700" : val < 0 ? "text-red-600" : "text-zinc-400";
 }
 
 function fmt(val: number | undefined | null, decimals = 2, suffix = "") {
@@ -88,19 +88,19 @@ function fmt(val: number | undefined | null, decimals = 2, suffix = "") {
 function SectionHeader({ label }: { label: string }) {
   return (
     <div className="flex items-center gap-3 mb-4">
-      <span className="text-xs font-mono font-bold tracking-widest text-zinc-500 uppercase">{label}</span>
-      <div className="flex-1 h-px bg-zinc-800" />
+      <span className="text-xs font-bold tracking-widest text-blue-900 uppercase">{label}</span>
+      <div className="flex-1 h-px bg-zinc-300" />
     </div>
   );
 }
 
 function MetricRow({ label, value, sub }: { label: string; value: React.ReactNode; sub?: string }) {
   return (
-    <div className="flex items-baseline justify-between py-1.5 border-b border-zinc-800/60">
-      <span className="text-xs text-zinc-500 font-mono">{label}</span>
-      <span className="text-sm font-mono font-medium">
+    <div className="flex items-baseline justify-between py-1.5 border-b border-zinc-200">
+      <span className="text-xs text-zinc-500">{label}</span>
+      <span className="text-sm font-medium text-zinc-800">
         {value}
-        {sub && <span className="text-xs text-zinc-600 ml-1">{sub}</span>}
+        {sub && <span className="text-xs text-zinc-400 ml-1">{sub}</span>}
       </span>
     </div>
   );
@@ -108,19 +108,19 @@ function MetricRow({ label, value, sub }: { label: string; value: React.ReactNod
 
 function CommentaryBlock({ text }: { text: string }) {
   if (!text) return null;
-  return <p className="text-sm text-zinc-300 leading-relaxed mt-3">{text}</p>;
+  return <p className="text-sm text-zinc-700 leading-relaxed mt-3">{text}</p>;
 }
 
 function TapeVsStory({ text }: { text: string }) {
   const lines = text.split("\n").filter(Boolean);
   return (
-    <div className="mt-3 rounded-md bg-zinc-900 border border-zinc-800 p-3 space-y-1.5">
+    <div className="mt-3 rounded-md bg-zinc-50 border border-zinc-200 p-3 space-y-1.5">
       {lines.map((line, i) => {
         const [label, ...rest] = line.split(": ");
         return (
-          <div key={i} className="flex gap-2 text-xs font-mono">
-            <span className="text-zinc-600 w-20 shrink-0">{label}</span>
-            <span className="text-zinc-300">{rest.join(": ")}</span>
+          <div key={i} className="flex gap-2 text-xs">
+            <span className="text-zinc-400 w-20 shrink-0">{label}</span>
+            <span className="text-zinc-700">{rest.join(": ")}</span>
           </div>
         );
       })}
@@ -131,9 +131,9 @@ function TapeVsStory({ text }: { text: string }) {
 function SoWhat({ text }: { text: string }) {
   if (!text) return null;
   return (
-    <div className="mt-3 rounded-md bg-zinc-900/60 border-l-2 border-amber-500/60 pl-3 py-2">
-      <span className="text-xs text-amber-500/80 font-mono uppercase tracking-wider">so what </span>
-      <p className="text-sm text-zinc-200 mt-0.5">{text}</p>
+    <div className="mt-3 rounded-md bg-amber-50 border-l-2 border-amber-500 pl-3 py-2">
+      <span className="text-xs text-amber-700 uppercase tracking-wider">so what </span>
+      <p className="text-sm text-zinc-700 mt-0.5">{text}</p>
     </div>
   );
 }
@@ -141,9 +141,9 @@ function SoWhat({ text }: { text: string }) {
 function Actionable({ text }: { text: string }) {
   if (!text) return null;
   return (
-    <div className="mt-2 rounded-md bg-zinc-900/40 border-l-2 border-blue-500/40 pl-3 py-2">
-      <span className="text-xs text-blue-400/70 font-mono uppercase tracking-wider">watch </span>
-      <p className="text-sm text-zinc-400 mt-0.5">{text}</p>
+    <div className="mt-2 rounded-md bg-blue-50 border-l-2 border-blue-400 pl-3 py-2">
+      <span className="text-xs text-blue-700 uppercase tracking-wider">watch </span>
+      <p className="text-sm text-zinc-600 mt-0.5">{text}</p>
     </div>
   );
 }
@@ -177,7 +177,7 @@ function EquitiesSection({ m, c, showCommentary }: { m: EquityMetrics; c: Dashbo
       </div>
       <div className="mt-3 flex flex-wrap gap-1.5">
         {Object.entries(m.sector_returns_wow ?? {}).map(([t, v]) => (
-          <div key={t} className={`px-2 py-0.5 rounded text-xs font-mono border ${v > 0 ? "bg-emerald-950/40 border-emerald-800/40 text-emerald-400" : "bg-red-950/40 border-red-800/40 text-red-400"}`}>
+          <div key={t} className={`px-2 py-0.5 rounded text-xs border ${v > 0 ? "bg-emerald-50 border-emerald-300 text-emerald-700" : "bg-red-50 border-red-300 text-red-600"}`}>
             {SECTOR_LABELS[t] ?? t} {fmt(v, 1, "%")}
           </div>
         ))}
@@ -203,7 +203,7 @@ function RatesSection({ m, c, showCommentary }: { m: RateMetrics; c: Dashboard["
           {(["UST_2Y", "UST_5Y", "UST_10Y", "UST_30Y"] as const).map((k) => (
             <MetricRow key={k} label={k.replace("UST_", "")}
               value={<>
-                <span className="text-zinc-200">{m.levels[k]?.toFixed(2) ?? "—"}%</span>
+                <span className="text-zinc-800">{m.levels[k]?.toFixed(2) ?? "—"}%</span>
                 <span className={`ml-2 text-xs ${chgColor(m.week_chg_bp[k])}`}>{fmt(m.week_chg_bp[k], 0, "bp")}</span>
               </>}
             />
@@ -231,24 +231,24 @@ function RatesSection({ m, c, showCommentary }: { m: RateMetrics; c: Dashboard["
 
 function FxSection({ m, c, showCommentary }: { m: FxMetrics; c: Dashboard["commentary"]["fx"]; showCommentary: boolean }) {
   const FACTOR_COLORS: Record<string, string> = {
-    growth_proxy: "text-blue-400", safe_haven: "text-purple-400",
-    tot_play: "text-amber-400", carry: "text-emerald-400",
+    growth_proxy: "text-blue-700", safe_haven: "text-purple-700",
+    tot_play: "text-amber-700", carry: "text-emerald-700",
   };
   return (
     <section>
       <SectionHeader label="G10 FX" />
       <div className="space-y-0">
         {(c.grid ?? []).map((row) => (
-          <div key={row.pair} className="flex items-start gap-3 py-2 border-b border-zinc-800/60">
+          <div key={row.pair} className="flex items-start gap-3 py-2 border-b border-zinc-200">
             <div className="w-16 shrink-0">
-              <span className="text-sm font-mono font-medium text-zinc-200">{row.pair}</span>
-              <div className={`text-xs font-mono ${chgColor(row.move_pct)}`}>{fmt(row.move_pct, 2, "%")}</div>
+              <span className="text-sm font-medium text-zinc-800">{row.pair}</span>
+              <div className={`text-xs ${chgColor(row.move_pct)}`}>{fmt(row.move_pct, 2, "%")}</div>
             </div>
             <div className="flex-1">
-              <span className={`text-xs font-mono ${FACTOR_COLORS[m.factor_labels?.[row.pair] ?? ""] ?? "text-zinc-500"}`}>
+              <span className={`text-xs ${FACTOR_COLORS[m.factor_labels?.[row.pair] ?? ""] ?? "text-zinc-400"}`}>
                 [{m.factor_labels?.[row.pair] ?? "—"}]
               </span>
-              {showCommentary && <p className="text-xs text-zinc-400 mt-0.5">{row.driver}</p>}
+              {showCommentary && <p className="text-xs text-zinc-500 mt-0.5">{row.driver}</p>}
             </div>
           </div>
         ))}
@@ -256,89 +256,13 @@ function FxSection({ m, c, showCommentary }: { m: FxMetrics; c: Dashboard["comme
       {showCommentary && (
         <>
           {c.cross_section_theme && (
-            <div className="mt-3 text-xs text-zinc-400 font-mono border border-zinc-800 rounded px-3 py-2">
-              <span className="text-zinc-600">theme </span>{c.cross_section_theme}
+            <div className="mt-3 text-xs text-zinc-600 border border-zinc-200 rounded px-3 py-2 bg-zinc-50">
+              <span className="text-zinc-400">theme </span>{c.cross_section_theme}
             </div>
           )}
           {c.misalignment && (
-            <div className="mt-2 text-xs text-zinc-400 font-mono border border-amber-900/30 rounded px-3 py-2 bg-amber-950/10">
-              <span className="text-amber-600/80">misalignment </span>{c.misalignment}
-            </div>
-          )}
-          <SoWhat text={c.so_what} />
-        </>
-      )}
-    </section>
-  );
-}
-
-function PredictionMarketsSection({ m, c, showCommentary }: { m: PredictionMarketMetrics; c: Dashboard["commentary"]["prediction_markets"]; showCommentary: boolean }) {
-  const TAG_COLORS: Record<string, string> = {
-    economy: "text-blue-400", fed_decisions: "text-purple-400", politics: "text-amber-400",
-  };
-  const probColor = (p: number | null) => {
-    if (p === null) return "text-zinc-400";
-    if (p >= 0.7) return "text-emerald-400";
-    if (p >= 0.4) return "text-yellow-400";
-    return "text-red-400";
-  };
-  const fmtProb = (p: number | null) => p !== null ? `${(p * 100).toFixed(0)}%` : "—";
-  const fmtVol = (v: number | null) => {
-    if (v === null) return "—";
-    if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
-    if (v >= 1_000) return `$${(v / 1_000).toFixed(0)}K`;
-    return `$${v.toFixed(0)}`;
-  };
-  const allMarkets = [
-    ...(m.fed_markets ?? []),
-    ...(m.top_markets ?? []).filter((t) => !(m.fed_markets ?? []).some((f) => f.question === t.question)),
-  ].slice(0, 10);
-
-  return (
-    <section>
-      <SectionHeader label="Prediction Markets · Polymarket" />
-      <div className="space-y-0">
-        {allMarkets.map((mkt, i) => (
-          <div key={i} className="flex items-center gap-3 py-2 border-b border-zinc-800/60">
-            <div className="w-12 shrink-0 text-center">
-              <span className={`text-base font-mono font-bold ${probColor(mkt.yes_price)}`}>{fmtProb(mkt.yes_price)}</span>
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs text-zinc-200 leading-snug truncate">{mkt.question}</p>
-              <div className="flex items-center gap-2 mt-0.5">
-                <span className={`text-xs font-mono ${TAG_COLORS[mkt.tag] ?? "text-zinc-600"}`}>{mkt.tag?.replace("_", " ")}</span>
-                <span className="text-zinc-700 text-xs">·</span>
-                <span className="text-xs text-zinc-600 font-mono">{fmtVol(mkt.volume_24h)} / 24h</span>
-              </div>
-            </div>
-            <div className="w-16 shrink-0 text-right">
-              {mkt.wow_chg !== null && mkt.wow_chg !== undefined ? (
-                <span className={`text-xs font-mono ${chgColor(mkt.wow_chg * 100)}`}>
-                  {mkt.wow_chg > 0 ? "+" : ""}{(mkt.wow_chg * 100).toFixed(0)}pp
-                </span>
-              ) : <span className="text-xs text-zinc-700">—</span>}
-            </div>
-          </div>
-        ))}
-      </div>
-      {showCommentary && (m.biggest_movers ?? []).length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          {m.biggest_movers.map((mkt, i) => (
-            <div key={i} className={`px-2 py-1 rounded text-xs font-mono border max-w-[280px] ${(mkt.wow_chg ?? 0) > 0 ? "bg-emerald-950/40 border-emerald-800/40 text-emerald-300" : "bg-red-950/40 border-red-800/40 text-red-300"}`}>
-              <span className="truncate block">{mkt.question.length > 40 ? mkt.question.slice(0, 40) + "…" : mkt.question}</span>
-              <span className="opacity-70">{fmtProb(mkt.yes_price)} {(mkt.wow_chg ?? 0) > 0 ? "↑" : "↓"}{Math.abs((mkt.wow_chg ?? 0) * 100).toFixed(0)}pp wow</span>
-            </div>
-          ))}
-        </div>
-      )}
-      {showCommentary && (
-        <>
-          <CommentaryBlock text={c.summary} />
-          <CommentaryBlock text={c.fed_read} />
-          {c.divergence && (
-            <div className="mt-2 rounded-md bg-zinc-900/40 border-l-2 border-violet-500/40 pl-3 py-2">
-              <span className="text-xs text-violet-400/70 font-mono uppercase tracking-wider">divergence </span>
-              <p className="text-sm text-zinc-400 mt-0.5">{c.divergence}</p>
+            <div className="mt-2 text-xs text-zinc-600 border border-amber-200 rounded px-3 py-2 bg-amber-50">
+              <span className="text-amber-600">misalignment </span>{c.misalignment}
             </div>
           )}
           <SoWhat text={c.so_what} />
@@ -356,22 +280,22 @@ export default function DashboardClient({ dashboard, asOf }: { dashboard: Dashbo
 
   return (
     <>
-      <div className="border-b border-zinc-800 px-6 py-4 flex items-center justify-between">
+      <div className="border-b border-zinc-200 px-6 py-4 flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-semibold tracking-tight text-zinc-100">Market Dashboard</h1>
-          <p className="text-xs text-zinc-600 font-mono mt-0.5">Weekly trader-note · updated every Friday close</p>
+          <h1 className="text-lg font-semibold tracking-tight text-blue-900">Market Dashboard</h1>
+          <p className="text-xs text-zinc-400 mt-0.5">Weekly trader-note · updated every Friday close</p>
         </div>
         <div className="flex items-center gap-4">
-          {asOf && <span className="text-xs text-zinc-600 font-mono">{asOf}</span>}
+          {asOf && <span className="text-xs text-zinc-400">{asOf}</span>}
           <button
             onClick={() => setShowCommentary((v) => !v)}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-mono border transition-colors ${
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs border transition-colors ${
               showCommentary
-                ? "bg-zinc-800 border-zinc-700 text-zinc-200"
-                : "bg-transparent border-zinc-800 text-zinc-500"
+                ? "bg-blue-50 border-blue-300 text-blue-800"
+                : "bg-transparent border-zinc-300 text-zinc-400"
             }`}
           >
-            <span className={`w-2 h-2 rounded-full ${showCommentary ? "bg-emerald-400" : "bg-zinc-600"}`} />
+            <span className={`w-2 h-2 rounded-full ${showCommentary ? "bg-emerald-500" : "bg-zinc-300"}`} />
             commentary
           </button>
         </div>
