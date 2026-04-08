@@ -65,6 +65,7 @@ interface MarketEvent {
   volume24hr: number;
   outcomes: Outcome[];
   isMulti: boolean;
+  endDate: string | null;
 }
 
 interface HistoryPoint {
@@ -88,7 +89,13 @@ async function fetchTopEvents(): Promise<MarketEvent[]> {
 
   const result: MarketEvent[] = [];
 
+  const now = Date.now();
+
   for (const ev of events) {
+    // Skip resolved markets
+    const endDate = ev.endDate ?? ev.end_date_iso ?? null;
+    if (endDate && new Date(endDate).getTime() < now) continue;
+
     const tags: { slug?: string; label?: string }[] = ev.tags ?? [];
     if (tagExcluded(tags)) continue;
 
@@ -136,6 +143,7 @@ async function fetchTopEvents(): Promise<MarketEvent[]> {
       volume24hr: Number(ev.volume24hr ?? 0),
       outcomes,
       isMulti,
+      endDate,
     });
 
     if (result.length >= 5) break;
@@ -160,8 +168,7 @@ async function fetchHistory(tokenId: string): Promise<HistoryPoint[]> {
     if (!res.ok) return [];
     const data = await res.json();
     const raw: { t: number; p: number }[] = data.history ?? [];
-    // Last 2 hours
-    return raw.slice(-120);
+    return raw;
   } catch {
     return [];
   }
@@ -212,15 +219,22 @@ function MarketChart({ event }: { event: MarketEvent }) {
     new Set(histories.flatMap((h) => h.history.map((pt) => pt.t)))
   ).sort((a, b) => a - b);
 
+  const spanMs = allTs.length > 1 ? (allTs[allTs.length - 1] - allTs[0]) * 1000 : 0;
+  const spanDays = spanMs / 86_400_000;
+
+  function formatTs(t: number): string {
+    const d = new Date(t * 1000);
+    if (spanDays >= 2) {
+      return d.toLocaleDateString("en-US", { month: "numeric", day: "numeric" });
+    }
+    return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
+  }
+
+  // Show ~7 evenly-spaced labels max to prevent overlap
+  const tickInterval = Math.max(1, Math.floor(allTs.length / 7));
+
   const chartData = allTs.map((t) => {
-    const row: Record<string, number | string> = {
-      t,
-      time: new Date(t * 1000).toLocaleTimeString("en-US", {
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false,
-      }),
-    };
+    const row: Record<string, number | string> = { t, time: formatTs(t) };
     for (const h of histories) {
       const pt = h.history.find((p) => p.t === t);
       if (pt !== undefined) row[h.label] = parseFloat((pt.p * 100).toFixed(1));
@@ -267,14 +281,15 @@ function MarketChart({ event }: { event: MarketEvent }) {
           <span className="text-xs text-zinc-700 font-mono">no history available</span>
         </div>
       ) : (
-        <ResponsiveContainer width="100%" height={130}>
-          <LineChart data={chartData} margin={{ top: 2, right: 4, bottom: 0, left: -18 }}>
+        <ResponsiveContainer width="100%" height={145}>
+          <LineChart data={chartData} margin={{ top: 2, right: 4, bottom: 4, left: -18 }}>
             <XAxis
               dataKey="time"
-              tick={{ fill: "#3f3f46", fontSize: 8, fontFamily: "monospace" }}
+              tick={{ fill: "#52525b", fontSize: 9, fontFamily: "monospace" }}
               tickLine={false}
               axisLine={false}
-              interval="preserveStartEnd"
+              interval={tickInterval}
+              height={20}
             />
             <YAxis
               domain={[0, 100]}
