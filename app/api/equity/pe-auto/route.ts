@@ -27,10 +27,14 @@ export async function GET() {
       next: { revalidate: 0 },
     });
 
-    if (!res.ok) return Response.json({});
+    if (!res.ok) {
+      console.error("Yahoo v7/quote failed:", res.status, res.statusText);
+      return Response.json({});
+    }
 
     const data = await res.json();
     const quotes: any[] = data?.quoteResponse?.result ?? [];
+    console.log("Yahoo v7/quote result count:", quotes.length, "sample:", JSON.stringify(quotes[0])?.slice(0, 200));
 
     const result: Record<string, { trailingPE: number | null; forwardPE: number | null }> = {};
     for (const q of quotes) {
