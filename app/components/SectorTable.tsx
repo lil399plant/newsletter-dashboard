@@ -149,6 +149,9 @@ export default function SectorTable() {
   const [editingCell, setEditingCell] = useState<{ ticker: string; field: "trailingPE" | "forwardPE" } | null>(null);
   const [saving, setSaving] = useState(false);
   const [editMode, setEditMode] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshMsg, setRefreshMsg] = useState<{ type: "ok" | "error"; text: string } | null>(null);
 
   // Load sector metadata + 10yr yield + stored PE values
   useEffect(() => {
@@ -158,6 +161,8 @@ export default function SectorTable() {
     ]).then(([meta, peData]) => {
       setTenYrYield(meta.tenYrYield ?? null);
       const yield10 = meta.tenYrYield ?? null;
+
+      if (peData._meta?.updatedAt) setLastUpdated(peData._meta.updatedAt);
 
       const initial: SectorRow[] = (meta.sectors ?? []).map((s: SectorMeta) => {
         const pe: PEValues = peData[s.ticker] ?? { trailingPE: null, forwardPE: null };
@@ -225,6 +230,50 @@ export default function SectorTable() {
 
   const allLoading = metaLoading || rows.length === 0;
 
+  async function handleRefresh() {
+    setRefreshing(true);
+    setRefreshMsg(null);
+    try {
+      const res = await fetch("/api/equity/pe-refresh", { method: "POST" });
+      const json = await res.json();
+      if (!res.ok || json.error) {
+        const msg = json.message ?? "Refresh failed.";
+        setRefreshMsg({ type: "error", text: msg });
+      } else {
+        setLastUpdated(json.updatedAt);
+        setRefreshMsg({ type: "ok", text: "P/E data refreshed." });
+        // Reload PE values into rows
+        const peData = await fetch("/api/equity/pe", { cache: "no-store" }).then((r) => r.json()).catch(() => ({}));
+        setRows((prev) =>
+          prev.map((r) => {
+            const pe = peData[r.ticker] ?? {};
+            const updated = { ...r };
+            if (pe.trailingPE != null) updated.trailingPE = pe.trailingPE;
+            if (pe.forwardPE  != null) updated.forwardPE  = pe.forwardPE;
+            updated.impliedEpsGrowth =
+              updated.trailingPE != null && updated.forwardPE != null && updated.forwardPE > 0
+                ? (updated.trailingPE / updated.forwardPE - 1) * 100 : null;
+            updated.erp =
+              updated.forwardPE != null && tenYrYield != null
+                ? parseFloat(((1 / updated.forwardPE) * 100 - tenYrYield).toFixed(2)) : null;
+            return updated;
+          })
+        );
+      }
+    } catch {
+      setRefreshMsg({ type: "error", text: "Network error. Try again." });
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
+  function fmtUpdated(iso: string | null): string {
+    if (!iso) return "";
+    try {
+      return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    } catch { return ""; }
+  }
+
   return (
     <section>
       {/* Header */}
@@ -234,7 +283,23 @@ export default function SectorTable() {
         {tenYrYield != null && (
           <span className="text-xs text-zinc-400">10yr {tenYrYield.toFixed(2)}%</span>
         )}
+        {lastUpdated && !refreshMsg && (
+          <span className="text-xs text-zinc-400">P/E as of {fmtUpdated(lastUpdated)}</span>
+        )}
+        {refreshMsg && (
+          <span className={`text-xs ${refreshMsg.type === "ok" ? "text-emerald-600" : "text-red-500"}`}>
+            {refreshMsg.text}
+          </span>
+        )}
         {saving && <span className="text-xs text-zinc-300 animate-pulse">saving…</span>}
+        <button
+          onClick={handleRefresh}
+          disabled={refreshing}
+          className="text-xs px-2 py-0.5 rounded border border-zinc-200 text-zinc-400 hover:text-zinc-600 disabled:opacity-40 transition-colors"
+          style={{ fontFamily: "Times New Roman, serif" }}
+        >
+          {refreshing ? "refreshing…" : "refresh P/E"}
+        </button>
         <button
           onClick={() => { setEditMode((v) => !v); setEditingCell(null); }}
           className={`text-xs px-2 py-0.5 rounded border transition-colors ${
