@@ -150,17 +150,24 @@ export default function SectorTable() {
   const [saving, setSaving] = useState(false);
   const [editMode, setEditMode] = useState(false);
 
-  // Load sector metadata + 10yr yield + stored PE values
+  // Load sector metadata + 10yr yield + PE values (auto-fetched + manual overrides)
   useEffect(() => {
     Promise.all([
       fetch("/api/equity/sectors", { cache: "no-store" }).then((r) => r.json()),
-      fetch("/api/equity/pe", { cache: "no-store" }).then((r) => r.json()),
-    ]).then(([meta, peData]) => {
+      fetch("/api/equity/pe-auto", { cache: "no-store" }).then((r) => r.json()).catch(() => ({})),
+      fetch("/api/equity/pe", { cache: "no-store" }).then((r) => r.json()).catch(() => ({})),
+    ]).then(([meta, autoData, manualData]) => {
       setTenYrYield(meta.tenYrYield ?? null);
       const yield10 = meta.tenYrYield ?? null;
 
       const initial: SectorRow[] = (meta.sectors ?? []).map((s: SectorMeta) => {
-        const pe: PEValues = peData[s.ticker] ?? { trailingPE: null, forwardPE: null };
+        const auto = autoData[s.ticker] ?? { trailingPE: null, forwardPE: null };
+        const manual = manualData[s.ticker] ?? {};
+        // Manual overrides auto on a per-field basis
+        const pe: PEValues = {
+          trailingPE: manual.trailingPE ?? auto.trailingPE ?? null,
+          forwardPE:  manual.forwardPE  ?? auto.forwardPE  ?? null,
+        };
         const impliedEpsGrowth =
           pe.trailingPE != null && pe.forwardPE != null && pe.forwardPE > 0
             ? (pe.trailingPE / pe.forwardPE - 1) * 100 : null;
